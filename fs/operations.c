@@ -242,28 +242,54 @@ int tfs_unlink(char const *target) {
     PANIC("TODO: tfs_unlink");
 }
 
+
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     
+    // Creates an array of chars to store the copied data from the source file
+    // and sets every entry to 0
     char buffer[SIZE_OF_BUFFER];
     memset(buffer, 0, SIZE_OF_BUFFER);
-    printf("%s", source_path);
 
+    // Creates a file descriptor for the source file and opens it in read mode
     FILE *source_fp = fopen(source_path, "r");
     if (source_fp == NULL) {
-        fprintf(stderr, "Open error: %s\n", strerror(errno));
+        fprintf(stderr, "Source file open error: %s\n", strerror(errno));
         return -1;
     }
 
+    // Makes the cursor point to the end of the file and then sets the 
+    // position as the file's size
+    fseek(source_fp, 0L, SEEK_END);
+    long size = ftell(source_fp);
+
+    // Checks if the file's size exceeds the size limit. If not, rewinds the
+    // cursor to the beginning
+    if (size > MAX_BLOCK_SIZE){
+        fprintf(stderr, "Source file exceeds size limit of %d.", 
+                MAX_BLOCK_SIZE);
+        return -1;
+    } else {
+        rewind(source_fp);
+    }
+
+    // Creates or truncates the destination file while setting dest_fp as its
+    // file descriptor
     int dest_fp = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
     if (dest_fp == -1) {
-        fprintf(stderr, "Open error: %s\n", strerror(errno));
+        fprintf(stderr, "Destination file open error: %s\n", strerror(errno));
         return -1;
     }
 
+    // Reads the first line of the source file and stores it in the buffer
+    // The number of bytes read is stored in bytes_read
     size_t bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
-    /* ALWAYS_ASSERT(bytes_read >= 0,
-                  "There was an error reading from the source file."); */
+    
+    // Creates a variable to store the number of bytes written
     ssize_t bytes_wrote = 0;
+
+    // While loop for copying the whole source file to the destination file
+    // Aborts if the number of bytes copied is different from the number of
+    // bytes written
     while (bytes_read > 0) {
         bytes_wrote = tfs_write(dest_fp, buffer, bytes_read);
         ALWAYS_ASSERT(bytes_wrote == bytes_read, 
@@ -271,6 +297,8 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
         bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
     }
     
+    // Closes source and destination files while ensuring that it has been
+    // done successfully
     ALWAYS_ASSERT(fclose(source_fp) == 0, 
                 "There was a problem closing the source file.");
     ALWAYS_ASSERT(tfs_close(dest_fp) == 0, 

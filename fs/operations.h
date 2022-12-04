@@ -2,6 +2,7 @@
 #define OPERATIONS_H
 
 #define SIZE_OF_BUFFER 128
+#define MAX_BLOCK_SIZE 1024
 
 #include "config.h"
 #include <sys/types.h>
@@ -135,8 +136,21 @@ int tfs_unlink(char const *target);
  *   - dest_path: absolute path name of the destination file (in TécnicoFS),
  *    which is created if needed, and overwritten if it already exists.
  *
- * Returns 0 if successful, -1 otherwise.
- */
+ * Return value:
+ *      0 - if successful
+ *      -1 - if a user error is encountered
+ * 
+ * Possible user errors:
+ *      - The path to the source file is incorrect
+ *      - The source file does not exist
+ *      - The source file is to large
+ *      - The destination file can not be created or overwritten
+ * 
+ * Possible internal errors:
+ *      - The number of bytes copied is different from the number of bytes 
+ *      written
+ *      - The files' closure is unsuccessful
+*/
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path);
 
 #endif // OPERATIONS_H

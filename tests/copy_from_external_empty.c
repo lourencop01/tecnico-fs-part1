@@ -7,7 +7,7 @@ int main() {
 
     char *str_ext_file = "";
     char *path_copied_file = "/f1";
-    char *path_src = "tests/empty_file.txt";
+    char *path_src = "../tests/empty_file.txt";
     char buffer[40];
 
     assert(tfs_init(NULL) != -1);
