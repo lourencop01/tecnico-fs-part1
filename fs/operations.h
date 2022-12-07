@@ -1,7 +1,7 @@
 #ifndef OPERATIONS_H
 #define OPERATIONS_H
 
-#define SIZE_OF_BUFFER 128
+#define SIZE_OF_BUFFER 512
 #define MAX_BLOCK_SIZE 1024
 
 #include "config.h"

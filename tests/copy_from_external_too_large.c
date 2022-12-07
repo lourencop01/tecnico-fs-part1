@@ -13,10 +13,18 @@ int main() {
         "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
         "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
         "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
+        "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
         "BBB! BBB! BBB! BBB! BBB! ";
     char *path_copied_file = "/f1";
-    char *path_src = "file_to_copy_over512.txt";
-    char buffer[600];
+    char *path_src = "file_to_copy_over1024.txt";
+    char buffer[1500];
 
     assert(tfs_init(NULL) != -1);
 
@@ -30,8 +38,8 @@ int main() {
     assert(f != -1);
 
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
-    assert(r == strlen(str_ext_file));
-    assert(!memcmp(buffer, str_ext_file, strlen(str_ext_file)));
+    assert(r == 1024);
+    assert(!memcmp(buffer, str_ext_file, 1024));
 
     printf("Successful test.\n");
 

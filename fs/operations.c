@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "betterassert.h"
 
@@ -242,7 +243,6 @@ int tfs_unlink(char const *target) {
     PANIC("TODO: tfs_unlink");
 }
 
-
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     
     // Creates an array of chars to store the copied data from the source file
@@ -257,21 +257,6 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
         return -1;
     }
 
-    // Makes the cursor point to the end of the file and then sets the 
-    // position as the file's size
-    fseek(source_fp, 0L, SEEK_END);
-    long size = ftell(source_fp);
-
-    // Checks if the file's size exceeds the size limit. If not, rewinds the
-    // cursor to the beginning
-    if (size > MAX_BLOCK_SIZE){
-        fprintf(stderr, "Source file exceeds size limit of %d.", 
-                MAX_BLOCK_SIZE);
-        return -1;
-    } else {
-        rewind(source_fp);
-    }
-
     // Creates or truncates the destination file while setting dest_fp as its
     // file descriptor
     int dest_fp = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
@@ -284,17 +269,23 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     // The number of bytes read is stored in bytes_read
     size_t bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
     
-    // Creates a variable to store the number of bytes written
+    // Creates a variable to store the number of bytes written and writes to
+    // the destination file
     ssize_t bytes_wrote = 0;
 
-    // While loop for copying the whole source file to the destination file
+    // While loop for copying the source file to the destination file (limited 
+    // to MAX_BLOCK_SIZE bytes)
     // Aborts if the number of bytes copied is different from the number of
     // bytes written
     while (bytes_read > 0) {
         bytes_wrote = tfs_write(dest_fp, buffer, bytes_read);
         ALWAYS_ASSERT(bytes_wrote == bytes_read, 
-                    "There was a problem writing to the destination file.");
-        bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
+                        "There was a problem writing to the destination file.");
+        if(ftell(source_fp) < MAX_BLOCK_SIZE) {
+            bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
+        } else {
+            break;
+        }
     }
     
     // Closes source and destination files while ensuring that it has been
@@ -306,3 +297,4 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
 
     return 0;
 }
+
