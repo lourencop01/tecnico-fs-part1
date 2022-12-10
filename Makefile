@@ -107,6 +107,8 @@ test: $(TARGET_EXECS)
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
 
+c:
+	rm -f $(OBJECTS) $(TARGET_EXECS)
 
 # This generates a dependency file, with some default dependencies gathered from the include tree
 # The dependencies are gathered in the file autodep. You can find an example illustrating this GCC feature, without Makefile, at this URL: https://renenyffenegger.ch/notes/development/languages/C-C-plus-plus/GCC/options/MM

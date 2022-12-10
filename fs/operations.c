@@ -137,42 +137,63 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 int tfs_sym_link(char const *target, char const *link_name) {
     (void)target;
     (void)link_name;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
-
-    PANIC("TODO: tfs_sym_link");
+    return 0;
 }
 
 int tfs_link(char const *target, char const *link_name) {
 
-    int link_desc = tfs_open(link_name, TFS_O_CREAT | TFS_O_TRUNC);
-    if(link_desc == -1) {
-        fprintf(stderr, "The link %s couldn't be created.\n", link_name);
+    // Checks if the link_name is valid
+    if (!valid_pathname(link_name)) {
+        fprintf(stderr, "The provided link name is invalid. "
+                    "Please use the following format: /...\n");
         return -1;
     }
 
+    // TODO: Checks if the target file is a soft link 
+
+    // Assigns the root inode to a pointer(*root_dir_inode) and checks if it
+    // exists.
     inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
     ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode does not exist.");
 
+    // Retrieves the number of the inode (inumber) of the target file.
+    // Also checks if any errors occured while looking for the inumber.
     int target_inumber = tfs_lookup(target, root_dir_inode);
     if(target_inumber == -1) {
         fprintf(stderr, 
-                    "The target file %s couldn't be found in the TécnicoFS.\n"
-                    , target);
+                    "The target file %s couldn't be found in the TécnicoFS. "
+                    "Please check if you inserted the correct path.\n", target);
         return -1;
     }
 
-    open_file_entry_t *link_entry = get_open_file_entry(link_desc);
-    ALWAYS_ASSERT(link_entry != NULL, 
-                "The hard link file was not found to be open or is invalid.");
+    // Removes the "/" from the link_name.
+    link_name++;
 
-    link_entry->of_inumber = target_inumber;
+    // Checks if this link already exists.
+    if (find_in_dir(root_dir_inode, link_name) == 0) {
+        fprintf(stderr, "This link already exists. Please try a different name"
+                    ".\n");
+    }
 
-    inode_get(target_inumber)->hard_link_counter++;
+    // Adds an entry to the root directory with the altered link_name and sets
+    // its inumber (d_inumber) to the target's inumber.
+    // Also checks if any problems occured.
+    int link_entry = add_dir_entry(root_dir_inode, link_name, target_inumber);
+    if (link_entry == -1){
+        fprintf(stderr, "There was a problem adding %s to the root directory."
+                    "\n", link_name);
+    }
+
+    // Assigns the target's inode to a pointer and increases the target file's
+    // hard link count by 1.
+    // Also checks if it could find the target file inode
+    inode_t *target_inode = inode_get(target_inumber);
+    ALWAYS_ASSERT(root_dir_inode != NULL, "Target inode does not exist.\n");
+    target_inode->hard_link_counter++;
 
     return 0;
 
-}
+} 
 
 int tfs_close(int fhandle) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
@@ -267,12 +288,12 @@ int tfs_unlink(char const *target) {
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     
-    // Creates an array of chars to store the copied data from the source file
-    // and sets every entry to 0
+    // Creates a buffer to store the copied data from the source file,
+    // allocates memory space for it and sets every entry to 0.
     char buffer[SIZE_OF_BUFFER];
     memset(buffer, 0, SIZE_OF_BUFFER);
 
-    // Creates a file handler for the source file and opens it in read mode
+    // Creates a file handler for the source file and opens it in read mode.
     FILE *source_fp = fopen(source_path, "r");
     if (source_fp == NULL) {
         fprintf(stderr, "Source file open error: %s\n", strerror(errno));
@@ -280,7 +301,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     }
 
     // Creates or truncates the destination file while setting dest_fp as its
-    // file descriptor
+    // file descriptor.
     int dest_fp = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
     if (dest_fp == -1) {
         fprintf(stderr, "Destination file creation error: %s\n", 
@@ -288,17 +309,17 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
         return -1;
     }
 
-    // Reads the first line of the source file and stores it in the buffer
-    // The number of bytes read is stored in bytes_read
+    // Reads the first line of the source file and stores it in the buffer.
+    // The number of bytes read is stored in bytes_read.
     size_t bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
     
     // Creates a variable to store the number of bytes written and writes to
-    // the destination file
+    // the destination file.
     ssize_t bytes_wrote = 0;
 
-    // While loop for copying the source file to the destination file
+    // While loop for copying the source file to the destination file.
     // Aborts if the number of bytes copied is different from the number of
-    // bytes written
+    // bytes written.
     while (bytes_read > 0) {
         bytes_wrote = tfs_write(dest_fp, buffer, bytes_read);
         if (bytes_read > bytes_wrote) {
@@ -312,7 +333,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     }
     
     // Closes source and destination files while ensuring that it has been
-    // done successfully
+    // done successfully.
     ALWAYS_ASSERT(fclose(source_fp) == 0, 
                 "There was a problem closing the source file.");
     ALWAYS_ASSERT(tfs_close(dest_fp) == 0, 
