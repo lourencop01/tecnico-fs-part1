@@ -144,12 +144,34 @@ int tfs_sym_link(char const *target, char const *link_name) {
 }
 
 int tfs_link(char const *target, char const *link_name) {
-    (void)target;
-    (void)link_name;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
 
-    PANIC("TODO: tfs_link");
+    int link_desc = tfs_open(link_name, TFS_O_CREAT | TFS_O_TRUNC);
+    if(link_desc == -1) {
+        fprintf(stderr, "The link %s couldn't be created.\n", link_name);
+        return -1;
+    }
+
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode does not exist.");
+
+    int target_inumber = tfs_lookup(target, root_dir_inode);
+    if(target_inumber == -1) {
+        fprintf(stderr, 
+                    "The target file %s couldn't be found in the TécnicoFS.\n"
+                    , target);
+        return -1;
+    }
+
+    open_file_entry_t *link_entry = get_open_file_entry(link_desc);
+    ALWAYS_ASSERT(link_entry != NULL, 
+                "The hard link file was not found to be open or is invalid.");
+
+    link_entry->of_inumber = target_inumber;
+
+    inode_get(target_inumber)->hard_link_counter++;
+
+    return 0;
+
 }
 
 int tfs_close(int fhandle) {
@@ -250,7 +272,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     char buffer[SIZE_OF_BUFFER];
     memset(buffer, 0, SIZE_OF_BUFFER);
 
-    // Creates a file descriptor for the source file and opens it in read mode
+    // Creates a file handler for the source file and opens it in read mode
     FILE *source_fp = fopen(source_path, "r");
     if (source_fp == NULL) {
         fprintf(stderr, "Source file open error: %s\n", strerror(errno));
@@ -261,7 +283,8 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     // file descriptor
     int dest_fp = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
     if (dest_fp == -1) {
-        fprintf(stderr, "Destination file open error: %s\n", strerror(errno));
+        fprintf(stderr, "Destination file creation error: %s\n", 
+                    strerror(errno));
         return -1;
     }
 
@@ -273,19 +296,19 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     // the destination file
     ssize_t bytes_wrote = 0;
 
-    // While loop for copying the source file to the destination file (limited 
-    // to MAX_BLOCK_SIZE bytes)
+    // While loop for copying the source file to the destination file
     // Aborts if the number of bytes copied is different from the number of
     // bytes written
     while (bytes_read > 0) {
         bytes_wrote = tfs_write(dest_fp, buffer, bytes_read);
-        ALWAYS_ASSERT(bytes_wrote == bytes_read, 
-                        "There was a problem writing to the destination file.");
-        if(ftell(source_fp) < MAX_BLOCK_SIZE) {
-            bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
-        } else {
+        if (bytes_read > bytes_wrote) {
+            fprintf(stderr, "The source file's size exceeds the limit. " 
+                        "Only %d bytes were copied.\n", MAX_BLOCK_SIZE);
             break;
         }
+        ALWAYS_ASSERT(bytes_wrote == bytes_read, 
+                        "There was a problem writing to the destination file.");
+        bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
     }
     
     // Closes source and destination files while ensuring that it has been
