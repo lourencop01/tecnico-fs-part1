@@ -10,8 +10,7 @@
 /**
  * TécnicoFS parameters.
  */
-typedef struct
-{
+typedef struct {
     size_t max_inode_count;
     size_t max_block_count;
     size_t max_open_files_count;
@@ -39,8 +38,7 @@ int tfs_destroy();
 /**
  * TécnicoFS file opening modes.
  */
-typedef enum
-{
+typedef enum {
     TFS_O_CREAT = 0b001,
     TFS_O_TRUNC = 0b010,
     TFS_O_APPEND = 0b100,
