@@ -85,14 +85,27 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     ALWAYS_ASSERT(root_dir_inode != NULL,
                   "tfs_open: root dir inode must exist");
     int inum = tfs_lookup(name, root_dir_inode);
+    printf("FORA if(inum>=0) %s, %d\n", name, inum);
     size_t offset;
 
     if (inum >= 0) {
+        printf("Dentro: %s, %d\n", name, inum);
         // The file already exists
         inode_t *inode = inode_get(inum);
         ALWAYS_ASSERT(inode != NULL,
                       "tfs_open: directory files must have an inode");
-
+        if (inode->i_node_type == T_SYMLINK) {
+            printf("entra aqui\n");
+            inum = tfs_lookup(inode->sym_path, root_dir_inode);
+            if (inum == -1) {
+                fprintf(stderr, "Could not find the file to which the symbolic"
+                            " link is linked to in the root directory.\n");
+                return -1;
+            }
+            inode = inode_get(inum);
+            ALWAYS_ASSERT(inode != NULL, "Couldn't fetch the symbolic link's"
+                        " target inode.");
+        }
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
@@ -135,8 +148,52 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 }
 
 int tfs_sym_link(char const *target, char const *link_name) {
-    (void)target;
-    (void)link_name;
+    
+    // Checks if the link_name and target_name are valid names
+    if (!valid_pathname(link_name) && !valid_pathname(target)) {
+        fprintf(stderr, "The provided link name or target name is invalid. "
+                    "Please use the following format: /...\n");
+        return -1;
+    }
+
+    // Assigns the root inode to a pointer(*root_dir_inode) and checks if it
+    // exists.
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode was not found.");
+
+    char *sub_name = (char*)malloc(strlen(target));
+    strcpy(sub_name, target);
+    sub_name++;
+
+    if (find_in_dir(root_dir_inode, sub_name) == -1) {
+        fprintf(stderr, "The target was not found in the root directory.\n");
+        return -1;
+    }
+    printf("finds the target in root dir\n");
+
+    int link_inumber = inode_create(T_SYMLINK);
+    if (link_inumber == -1){
+        fprintf(stderr, "There are no more free slots in the inode table.\n");
+        return -1;   
+    }
+    printf("creates symlink inode with number %d\n", link_inumber);
+
+
+    inode_t *link_inode = inode_get(link_inumber);
+    ALWAYS_ASSERT(link_inode != NULL, "Couldn't fetch link's inode.");
+
+    // TODO: Check if we have to increase the i_size also?
+    // Copy the target path to the sym_path variable in the inode.
+    link_inode->sym_path = (char*)malloc(strlen(target));
+    strcpy(link_inode->sym_path, target);
+
+    // Add the symbolic link to the root directory while checking it any
+    // errors occured.
+    if (add_dir_entry(root_dir_inode, link_name++, link_inumber) == -1) {
+        fprintf(stderr, "There was a problem adding %s to the root directory."
+                    "\n", link_name);
+    }
+
     return 0;
 }
 
@@ -154,7 +211,7 @@ int tfs_link(char const *target, char const *link_name) {
     // Assigns the root inode to a pointer(*root_dir_inode) and checks if it
     // exists.
     inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode does not exist.");
+    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode was not found.");
 
     // Retrieves the number of the inode (inumber) of the target file.
     // Also checks if any errors occured while looking for the inumber.
@@ -173,13 +230,13 @@ int tfs_link(char const *target, char const *link_name) {
     if (find_in_dir(root_dir_inode, link_name) == 0) {
         fprintf(stderr, "This link already exists. Please try a different name"
                     ".\n");
+        return -1;
     }
 
     // Adds an entry to the root directory with the altered link_name and sets
     // its inumber (d_inumber) to the target's inumber.
     // Also checks if any problems occured.
-    int link_entry = add_dir_entry(root_dir_inode, link_name, target_inumber);
-    if (link_entry == -1){
+    if (add_dir_entry(root_dir_inode, link_name, target_inumber) == -1){
         fprintf(stderr, "There was a problem adding %s to the root directory."
                     "\n", link_name);
     }
@@ -188,7 +245,7 @@ int tfs_link(char const *target, char const *link_name) {
     // hard link count by 1.
     // Also checks if it could find the target file inode
     inode_t *target_inode = inode_get(target_inumber);
-    ALWAYS_ASSERT(root_dir_inode != NULL, "Target inode does not exist.\n");
+    ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.\n");
     target_inode->hard_link_counter++;
 
     return 0;
