@@ -268,6 +268,7 @@ int tfs_link(char const *target, char const *link_name)
         fprintf(stderr, "There was a problem adding %s to the root directory."
                         "\n",
                 link_name);
+        return -1;
     }
 
     // Increases the target file's hard link count by 1.
