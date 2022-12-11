@@ -62,6 +62,14 @@ static bool valid_pathname(char const *name)
     return name != NULL && strlen(name) > 1 && name[0] == '/';
 }
 
+inode_t *root_inode()
+{
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                  "tfs_open: root dir inode must exist");
+    return root_dir_inode;
+}
+
 /**
  * Looks for a file.
  *
@@ -94,10 +102,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode)
         return -1;
     }
 
-    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-    ALWAYS_ASSERT(root_dir_inode != NULL,
-                  "tfs_open: root dir inode must exist");
-    int inum = tfs_lookup(name, root_dir_inode);
+    int inum = tfs_lookup(name, root_inode());
     size_t offset;
 
     if (inum >= 0)
@@ -108,7 +113,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode)
                       "tfs_open: directory files must have an inode");
         if (inode->i_node_type == T_SYMLINK)
         {
-            inum = tfs_lookup(inode->sym_path, root_dir_inode);
+            inum = tfs_lookup(inode->sym_path, root_inode());
             if (inum == -1)
             {
                 fprintf(stderr, "Could not find the file to which the symbolic"
@@ -149,7 +154,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode)
         }
 
         // Add entry in the root directory
-        if (add_dir_entry(root_dir_inode, name + 1, inum) == -1)
+        if (add_dir_entry(root_inode(), name + 1, inum) == -1)
         {
             inode_delete(inum);
             return -1; // no space in directory
@@ -175,23 +180,14 @@ int tfs_sym_link(char const *target, char const *link_name)
 {
 
     // Checks if the link_name and target_name are valid names
-    if (!valid_pathname(link_name) && !valid_pathname(target))
+    if (!valid_pathname(link_name))
     {
-        fprintf(stderr, "The provided link name or target name is invalid. "
+        fprintf(stderr, "The provided link name is invalid. "
                         "Please use the following format: /...\n");
         return -1;
     }
 
-    // Assigns the root inode to a pointer(*root_dir_inode) and checks if it
-    // exists.
-    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode was not found.");
-
-    char *sub_name = (char *)malloc(strlen(target));
-    strcpy(sub_name, target);
-    sub_name++;
-
-    if (find_in_dir(root_dir_inode, sub_name) == -1)
+    if (tfs_lookup(target, root_inode()) == -1)
     {
         fprintf(stderr, "The target was not found in the root directory.\n");
         return -1;
@@ -217,7 +213,7 @@ int tfs_sym_link(char const *target, char const *link_name)
 
     // Add the symbolic link to the root directory while checking it any
     // errors occured.
-    if (add_dir_entry(root_dir_inode, link_name, link_inumber) == -1)
+    if (add_dir_entry(root_inode(), link_name, link_inumber) == -1)
     {
         fprintf(stderr, "There was a problem adding %s to the root directory."
                         "\n",
@@ -230,28 +226,23 @@ int tfs_sym_link(char const *target, char const *link_name)
 int tfs_link(char const *target, char const *link_name)
 {
 
-    // Checks if the link_name is valid
-    if (!valid_pathname(link_name))
-    {
-        fprintf(stderr, "The provided link name is invalid. "
-                        "Please use the following format: /...\n");
-        return -1;
-    }
-
-    // Assigns the root inode to a pointer(*root_dir_inode) and checks if it
-    // exists.
-    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-    ALWAYS_ASSERT(root_dir_inode != NULL, "Root inode was not found.");
-
     // Retrieves the number of the inode (inumber) of the target file.
     // Also checks if any errors occured while looking for the inumber.
-    int target_inumber = tfs_lookup(target, root_dir_inode);
+    int target_inumber = tfs_lookup(target, root_inode());
     if (target_inumber == -1)
     {
         fprintf(stderr,
                 "The target file %s couldn't be found in the TécnicoFS. "
                 "Please check if you inserted the correct path.\n",
                 target);
+        return -1;
+    }
+
+    // Checks if this link already exists.
+    if (tfs_lookup(link_name, root_inode()) == 0)
+    {
+        fprintf(stderr, "This link already exists. Please try a different name"
+                        ".\n");
         return -1;
     }
 
@@ -269,18 +260,10 @@ int tfs_link(char const *target, char const *link_name)
     // Removes the "/" from the link_name.
     link_name++;
 
-    // Checks if this link already exists.
-    if (find_in_dir(root_dir_inode, link_name) == 0)
-    {
-        fprintf(stderr, "This link already exists. Please try a different name"
-                        ".\n");
-        return -1;
-    }
-
     // Adds an entry to the root directory with the altered link_name and sets
     // its inumber (d_inumber) to the target's inumber.
     // Also checks if any problems occured.
-    if (add_dir_entry(root_dir_inode, link_name, target_inumber) == -1)
+    if (add_dir_entry(root_inode(), link_name, target_inumber) == -1)
     {
         fprintf(stderr, "There was a problem adding %s to the root directory."
                         "\n",
@@ -295,9 +278,41 @@ int tfs_link(char const *target, char const *link_name)
 
 int tfs_unlink(char const *target)
 {
-    (void)target;
+    // Retrieves the number of the inode (inumber) of the target file.
+    // Also checks if any errors occured while looking for the inumber.
+    int target_inumber = tfs_lookup(target, root_inode());
+    if (target_inumber == -1)
+    {
+        fprintf(stderr,
+                "The target file %s couldn't be found in the TécnicoFS. "
+                "Please check if you inserted the correct path.\n",
+                target);
+        return -1;
+    }
 
-    PANIC("TODO: tfs_unlink");
+    // Retrieves the target inode and checks if it could be found and if it
+    // belongs to a soft link.
+    inode_t *target_inode = inode_get(target_inumber);
+    ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.\n");
+
+    // Removes the "/" from the target name.
+    target++;
+
+    // Removes the target entry from the directory's entries while
+    // accessing it has been done correctly.
+    ALWAYS_ASSERT(clear_dir_entry(root_inode(), target) == 0, "Could not "
+                                                              "remove the link file from the directory.");
+
+    if (target_inode->i_node_type == T_SYMLINK || target_inode->hard_link_counter == 1)
+    {
+        inode_delete(target_inumber);
+    }
+    else if (target_inode->hard_link_counter > 1)
+    {
+        target_inode->hard_link_counter--;
+    }
+
+    return 0;
 }
 
 int tfs_close(int fhandle)

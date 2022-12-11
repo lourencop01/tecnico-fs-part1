@@ -10,7 +10,8 @@
 /**
  * TécnicoFS parameters.
  */
-typedef struct {
+typedef struct
+{
     size_t max_inode_count;
     size_t max_block_count;
     size_t max_open_files_count;
@@ -38,7 +39,8 @@ int tfs_destroy();
 /**
  * TécnicoFS file opening modes.
  */
-typedef enum {
+typedef enum
+{
     TFS_O_CREAT = 0b001,
     TFS_O_TRUNC = 0b010,
     TFS_O_APPEND = 0b100,
@@ -139,18 +141,18 @@ int tfs_unlink(char const *target);
  * Return value:
  *      0 - if successful
  *      -1 - if a user error is encountered
- * 
+ *
  * Possible user errors:
  *      - The path to the source file is incorrect
  *      - The source file does not exist
  *      - The source file is to large
  *      - The destination file can not be created or overwritten
- * 
+ *
  * Possible internal errors:
- *      - The number of bytes copied is different from the number of bytes 
+ *      - The number of bytes copied is different from the number of bytes
  *      written
  *      - The files' closure is unsuccessful
-*/
+ */
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path);
 
 #endif // OPERATIONS_H
