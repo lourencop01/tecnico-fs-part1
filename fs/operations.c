@@ -158,10 +158,17 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 
 int tfs_sym_link(char const *target, char const *link_name) {
 
-    // Checks if the link_name is a valid names
+    // Checks if this link already exists.
+    if (tfs_lookup(link_name, root_inode()) == 0) {
+        fprintf(stderr, "This file already exists. Please try a different name"
+                    ".\n");
+        return -1;
+    }
+
+    // Checks is the link name is valid.
     if (!valid_pathname(link_name)) {
-        fprintf(stderr, "The provided link name is invalid. "
-                    "Please use the following format: /...\n");
+        fprintf(stderr, "The link name you entered in invalid. Please try "
+                    "using the following format: /...\n");
         return -1;
     }
 
@@ -203,19 +210,26 @@ int tfs_sym_link(char const *target, char const *link_name) {
 
 int tfs_link(char const *target, char const *link_name) {
 
+    // Checks if this link already exists.
+    if (tfs_lookup(link_name, root_inode()) == 0) {
+        fprintf(stderr, "This file already exists. Please try a different name"
+                    ".\n");
+        return -1;
+    }
+    
+    // Checks is the link name is valid.
+    if (!valid_pathname(link_name)) {
+        fprintf(stderr, "The link name you entered in invalid. Please try "
+                    "using the following format: /...\n");
+        return -1;
+    }
+
     // Retrieves the number of the inode (inumber) of the target file.
     // Also checks if any errors occured while looking for the inumber.
     int target_inumber = tfs_lookup(target, root_inode());
     if (target_inumber == -1) {
         fprintf(stderr, "The target file %s couldn't be found in the TécnicoFS."
                 " Please check if you inserted the correct path.\n", target);
-        return -1;
-    }
-
-    // Checks if this link already exists.
-    if (tfs_lookup(link_name, root_inode()) == 0) {
-        fprintf(stderr, "This link already exists. Please try a different name"
-                    ".\n");
         return -1;
     }
 
@@ -270,8 +284,8 @@ int tfs_unlink(char const *target) {
     ALWAYS_ASSERT(clear_dir_entry(root_inode(), target) == 0, "Could not "
                 "remove the link file from the directory.");
 
-    // Checks if the target inode is a symbolic link or if the hard link
-    // counter is equal to one and if so, it shall delete the target inode.
+    // Checks if the target inode is a symbolic link, or if the hard link
+    // counter is equal to one and, if so, it will delete the target inode.
     if (target_inode->i_node_type == T_SYMLINK || 
                 target_inode->hard_link_counter == 1) {
         inode_delete(target_inumber);
