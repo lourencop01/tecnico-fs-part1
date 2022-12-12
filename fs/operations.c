@@ -96,6 +96,9 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         inode_t *inode = inode_get(inum);
         ALWAYS_ASSERT(inode != NULL,
                     "tfs_open: directory files must have an inode");
+
+        // Checks if the inode belongs to a symbolic link and responds
+        // accordingly.
         if (inode->i_node_type == T_SYMLINK) {
             inum = tfs_lookup(inode->sym_path, root_inode());
             if (inum == -1) {
