@@ -174,7 +174,8 @@ int tfs_sym_link(char const *target, char const *link_name) {
 
     // Checks if the target file is in the root directory.
     if (tfs_lookup(target, root_inode()) == -1) {
-        fprintf(stderr, "The target was not found in the root directory.\n");
+        fprintf(stderr, "The target was not found in the root directory."
+                    " Please make sure you entered the correct path name.\n");
         return -1;
     }
 
