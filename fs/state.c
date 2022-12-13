@@ -530,3 +530,20 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
 
     return &open_file_table[fhandle];
 }
+
+bool is_file_open(int inumber) {
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        if (open_file_table[i].of_inumber == inumber) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inode_t *root_inode() {
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                "tfs_open: root dir inode must exist");
+    return root_dir_inode;
+}
+

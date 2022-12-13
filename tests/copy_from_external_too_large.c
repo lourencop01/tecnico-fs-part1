@@ -23,7 +23,7 @@ int main() {
         "BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! BBB! "
         "BBB! BBB! BBB! BBB! BBB! ";
     char *path_copied_file = "/f1";
-    char *path_src = "file_to_copy_over1024.txt";
+    char *path_src = "tests/file_to_copy_over1024.txt";
     char buffer[1500];
 
     assert(tfs_init(NULL) != -1);
@@ -32,7 +32,7 @@ int main() {
     ssize_t r;
 
     f = tfs_copy_from_external_fs(path_src, path_copied_file);
-    assert(f != -1);
+    assert(f == -1);
 
     f = tfs_open(path_copied_file, TFS_O_CREAT);
     assert(f != -1);

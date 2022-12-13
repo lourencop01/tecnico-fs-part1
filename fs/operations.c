@@ -50,14 +50,8 @@ int tfs_destroy() {
 }
 
 static bool valid_pathname(char const *name) {
-    return name != NULL && strlen(name) > 1 && name[0] == '/';
-}
-
-inode_t *root_inode() {
-    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-    ALWAYS_ASSERT(root_dir_inode != NULL,
-                "tfs_open: root dir inode must exist");
-    return root_dir_inode;
+    return name != NULL && strlen(name) > 1 && name[0] == '/'
+                && strlen(name) <= MAX_FILE_NAME;
 }
 
 /**
@@ -97,18 +91,10 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         ALWAYS_ASSERT(inode != NULL,
                     "tfs_open: directory files must have an inode");
 
-        // Checks if the inode belongs to a symbolic link and responds
-        // accordingly.
+        // Checks if the inode belongs to a symbolic link and recursively
+        // looks for the final target.
         if (inode->i_node_type == T_SYMLINK) {
-            inum = tfs_lookup(inode->sym_path, root_inode());
-            if (inum == -1) {
-                fprintf(stderr, "Could not find the file to which the symbolic"
-                            " link is linked to in the root directory.\n");
-                return -1;
-            }
-            inode = inode_get(inum);
-            ALWAYS_ASSERT(inode != NULL, "Couldn't fetch the symbolic link's"
-                        " target inode.");
+            return tfs_open(inode->sym_path, mode);
         }
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
@@ -234,13 +220,14 @@ int tfs_link(char const *target, char const *link_name) {
         return -1;
     }
 
-    // Retrieves the target inode and checks if it could be found and if it
-    // belongs to a soft link.
+    // Retrieves the target inode and checks if it could be found.
     inode_t *target_inode = inode_get(target_inumber);
     ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.");
+
+    // Checks if the target inode is a symbolic link or a directory.
     if (target_inode->i_node_type == T_SYMLINK) {
-        fprintf(stderr, "Unable to proceed. Reason: target file is a soft "
-                    "link.\n");
+        fprintf(stderr, "Unable to proceed. Reason: target file is not "
+                    "supported.\n");
         return -1;
     }
 
@@ -400,8 +387,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     // file descriptor.
     int dest_fp = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
     if (dest_fp == -1) {
-        fprintf(stderr, "Destination file creation error: %s\n",
-                    strerror(errno));
+        fprintf(stderr, "Destination file creation error.\n");
         return -1;
     }
 
@@ -418,13 +404,18 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     // bytes written.
     while (bytes_read > 0) {
         bytes_wrote = tfs_write(dest_fp, buffer, bytes_read);
-        if (bytes_read > bytes_wrote) {
-            fprintf(stderr, "The source file's size exceeds the limit. "
-                        "Only %d bytes were copied.\n", MAX_BLOCK_SIZE);
-            break;
+        if (bytes_read != bytes_wrote) {
+            fprintf(stderr, "There was a problem writing "
+            " to the destination file.\n");
+            // Closes source and destination files while ensuring that it has been
+            // done successfully.
+            ALWAYS_ASSERT(fclose(source_fp) == 0,
+                        "There was a problem closing the source file.");
+            ALWAYS_ASSERT(tfs_close(dest_fp) == 0,
+                        "There was a problem closing the destination file.");
+            
+            return -1;
         }
-        ALWAYS_ASSERT(bytes_wrote == bytes_read,
-                      "There was a problem writing to the destination file.");
         bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
     }
 

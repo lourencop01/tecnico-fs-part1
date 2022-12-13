@@ -71,4 +71,16 @@ int add_to_open_file_table(int inumber, size_t offset);
 void remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
 
+/**
+ * Checks if a file is open.
+ * 
+ * Returns true if it is, false if not.
+*/
+bool is_file_open(int inumber);
+
+/**
+ *Returns a pointer to the root inode.
+ */
+inode_t *root_inode();
+
 #endif // STATE_H
