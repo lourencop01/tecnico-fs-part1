@@ -50,6 +50,7 @@ int tfs_destroy() {
 }
 
 static bool valid_pathname(char const *name) {
+    // TODO: verificar se n é +1 no max file name
     return name != NULL && strlen(name) > 1 && name[0] == '/'
                 && strlen(name) <= MAX_FILE_NAME;
 }
@@ -226,8 +227,8 @@ int tfs_link(char const *target, char const *link_name) {
 
     // Checks if the target inode is a symbolic link or a directory.
     if (target_inode->i_node_type == T_SYMLINK) {
-        fprintf(stderr, "Unable to proceed. Reason: target file is not "
-                    "supported.\n");
+        fprintf(stderr, "Unable to proceed. Reason: target file is a "
+                    "soft link.\n");
         return -1;
     }
 
@@ -260,6 +261,8 @@ int tfs_unlink(char const *target) {
         return -1;
     }
 
+    // TODO: Checks if the file is open (here or in the last if of this func?)
+
     // Retrieves the target inode and checks if it could be found.
     inode_t *target_inode = inode_get(target_inumber);
     ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.\n");
@@ -279,6 +282,7 @@ int tfs_unlink(char const *target) {
         inode_delete(target_inumber);
     // Else, if the target inode still has multiple hard links, decreases its
     // count by 1.
+    //TRINCO
     } else if (target_inode->hard_link_counter > 1) {
         target_inode->hard_link_counter--;
     }

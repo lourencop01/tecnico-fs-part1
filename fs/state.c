@@ -99,13 +99,13 @@ static void insert_delay(void)
 int state_init(tfs_params params)
 {
     fs_params = params;
-    //TRINCO
+    //TRINCO MUTEX
     if (inode_table != NULL) {
         return -1; // already initialized
     }
 
     inode_table = malloc(INODE_TABLE_SIZE * sizeof(inode_t));
-    //Abre trinco
+    //ABRE MUTEX
     freeinode_ts = malloc(INODE_TABLE_SIZE * sizeof(allocation_state_t));
     fs_data = malloc(DATA_BLOCKS * BLOCK_SIZE);
     free_blocks = malloc(DATA_BLOCKS * sizeof(allocation_state_t));
@@ -174,11 +174,11 @@ static int inode_alloc(void)
         }
 
         // Finds first free entry in inode table
-        //TRINCO
+        //TRINCO INODE TABLE MUTEX
         if (freeinode_ts[inumber] == FREE) {
             //  Found a free entry, so takes it for the new inode
             freeinode_ts[inumber] = TAKEN;
-
+        //ABRE MUTEX
             return (int)inumber;
         }
     }
@@ -294,6 +294,8 @@ void inode_delete(int inumber) {
  * Returns pointer to inode.
  */
 inode_t *inode_get(int inumber) {
+    // TODO: É aqui que faço o lock de um inode só? Ou seja o q ta inicializado
+    // na struct do inode
     ALWAYS_ASSERT(valid_inumber(inumber), "inode_get: invalid inumber");
 
     insert_delay(); // simulate storage access delay to inode
@@ -366,6 +368,7 @@ int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
 
     // Finds and fills the first empty entry
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
+        //TRINCO
         if (dir_entry[i].d_inumber == -1) {
             dir_entry[i].d_inumber = sub_inumber;
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
@@ -392,6 +395,7 @@ int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
  *   - Directory does not contain a file named sub_name.
  */
 int find_in_dir(inode_t const *inode, char const *sub_name) {
+    //TRINCO DE LEITURA DO INODE DA DIRETORIA ROOT
     ALWAYS_ASSERT(inode != NULL, "find_in_dir: inode must be non-NULL");
     ALWAYS_ASSERT(sub_name != NULL, "find_in_dir: sub_name must be non-NULL");
 
@@ -401,7 +405,6 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
     }
 
     // Locates the block containing the entries of the directory
-    //TRINCO: aqui não será preciso pois não? visto que estamos so a fazer um get
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
     ALWAYS_ASSERT(dir_entry != NULL,
                   "find_in_dir: directory inode must have a data block");
@@ -413,9 +416,10 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
             (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
             int sub_inumber = dir_entry[i].d_inumber;
             return sub_inumber;
+            //UNLOCK
         }
     }
-
+    //UNLOCK
     return -1; // entry not found
 }
 
@@ -488,6 +492,7 @@ void *data_block_get(int block_number) {
  */
 int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        //TRINCO
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             open_file_table[i].of_inumber = inumber;
