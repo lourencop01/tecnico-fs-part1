@@ -99,12 +99,13 @@ static void insert_delay(void)
 int state_init(tfs_params params)
 {
     fs_params = params;
-
+    //TRINCO
     if (inode_table != NULL) {
         return -1; // already initialized
     }
 
     inode_table = malloc(INODE_TABLE_SIZE * sizeof(inode_t));
+    //Abre trinco
     freeinode_ts = malloc(INODE_TABLE_SIZE * sizeof(allocation_state_t));
     fs_data = malloc(DATA_BLOCKS * BLOCK_SIZE);
     free_blocks = malloc(DATA_BLOCKS * sizeof(allocation_state_t));
@@ -173,6 +174,7 @@ static int inode_alloc(void)
         }
 
         // Finds first free entry in inode table
+        //TRINCO
         if (freeinode_ts[inumber] == FREE) {
             //  Found a free entry, so takes it for the new inode
             freeinode_ts[inumber] = TAKEN;
@@ -271,6 +273,8 @@ void inode_delete(int inumber) {
 
     ALWAYS_ASSERT(valid_inumber(inumber), "inode_delete: invalid inumber");
 
+    //Trinco? Não será redundante? 
+    //Porque mesmo que façam free do mesmo inode é algo aceitavel
     ALWAYS_ASSERT(freeinode_ts[inumber] == TAKEN,
                   "inode_delete: inode already freed");
 
@@ -397,6 +401,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
     }
 
     // Locates the block containing the entries of the directory
+    //TRINCO: aqui não será preciso pois não? visto que estamos so a fazer um get
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
     ALWAYS_ASSERT(dir_entry != NULL,
                   "find_in_dir: directory inode must have a data block");
@@ -427,7 +432,8 @@ int data_block_alloc(void) {
         if (i * sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
-
+        
+        //TRINCO
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
 

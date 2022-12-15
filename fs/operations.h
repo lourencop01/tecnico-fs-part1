@@ -2,7 +2,6 @@
 #define OPERATIONS_H
 
 #define SIZE_OF_BUFFER 512
-#define MAX_BLOCK_SIZE 1024
 
 #include "config.h"
 #include <sys/types.h>
