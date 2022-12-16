@@ -1,6 +1,7 @@
 #ifndef STATE_H
 #define STATE_H
 
+#include <pthread.h>
 #include "config.h"
 #include "operations.h"
 
@@ -8,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <pthread.h>
+
 
 /**
  * Directory entry

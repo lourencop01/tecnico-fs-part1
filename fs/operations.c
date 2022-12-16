@@ -1,6 +1,9 @@
 #include "operations.h"
 #include "config.h"
 #include "state.h"
+#include "betterassert.h"
+
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +11,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "betterassert.h"
+
 
 tfs_params tfs_default_params() {
     tfs_params params = {
@@ -50,9 +53,8 @@ int tfs_destroy() {
 }
 
 static bool valid_pathname(char const *name) {
-    // TODO: verificar se n é +1 no max file name
     return name != NULL && strlen(name) > 1 && name[0] == '/'
-                && strlen(name) <= MAX_FILE_NAME;
+                && strlen(name) <= (MAX_FILE_NAME + 1);
 }
 
 /**
@@ -261,8 +263,6 @@ int tfs_unlink(char const *target) {
         return -1;
     }
 
-    // TODO: Checks if the file is open (here or in the last if of this func?)
-
     // Retrieves the target inode and checks if it could be found.
     inode_t *target_inode = inode_get(target_inumber, false);
     ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.\n");
@@ -277,13 +277,21 @@ int tfs_unlink(char const *target) {
 
     // Checks if the target inode is a symbolic link, or if the hard link
     // counter is equal to one and, if so, it will delete the target inode.
-    if (target_inode->i_node_type == T_SYMLINK || 
-                target_inode->hard_link_counter == 1) {
+    if (target_inode->i_node_type == T_SYMLINK) {
+        inode_delete(target_inumber);
+    } else if (target_inode->hard_link_counter == 1) {
+        if (is_file_open(target_inumber)) {
+            fprintf(stderr, "The file you are trying to delete is currently "
+                        " open. Please close it and try again.\n");
+            return -1;
+        }
         inode_delete(target_inumber);
     // Else, if the target inode still has multiple hard links, decreases its
     // count by 1.
     } else if (target_inode->hard_link_counter > 1) {
         target_inode->hard_link_counter--;
+    } else {
+        return -1;
     }
 
     return 0;

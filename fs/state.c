@@ -1,11 +1,13 @@
 #include "state.h"
 #include "betterassert.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
 
 /*
  * Persistent FS state
@@ -271,8 +273,10 @@ inode_t *inode_get(int inumber, bool mode) {
     if(mode) {
         pthread_rwlock_rdlock(&inode_table[inumber].inode_lock);
     } 
-    else {
+    else if (!mode) {
         pthread_rwlock_wrlock(&inode_table[inumber].inode_lock);
+    } else {
+        return NULL;
     }
 
     return &inode_table[inumber];
