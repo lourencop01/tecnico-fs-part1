@@ -202,7 +202,7 @@ int inode_create(inode_type i_type)
     inode->hard_link_counter = 1;
     inode->i_node_type = i_type;
 
-    // Initializes the inode's lock
+    // Initializes the inode's lock.
     pthread_rwlock_init(&inode->inode_lock, NULL);
 
     switch (i_type) {
@@ -252,6 +252,7 @@ void inode_delete(int inumber) {
     insert_delay();
     insert_delay();
 
+    //TODO: Lock aqui? Talvez. Correia faz sempre lock em condiçoes basicamente
     ALWAYS_ASSERT(valid_inumber(inumber), "inode_delete: invalid inumber");
 
     ALWAYS_ASSERT(freeinode_ts[inumber] == TAKEN,

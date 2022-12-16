@@ -88,6 +88,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     int inum = tfs_lookup(name, root_inode(true));
     size_t offset;
 
+    //TODO: Lock because two files could be created at the same time.
     if (inum >= 0) {
         // The file already exists.
         inode_t *inode = inode_get(inum, false);
