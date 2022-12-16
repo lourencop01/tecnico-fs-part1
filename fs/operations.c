@@ -33,7 +33,7 @@ int tfs_init(tfs_params const *params_ptr) {
         return -1;
     }
 
-    // create root inode
+    // Create root inode.
     int root = inode_create(T_DIRECTORY);
     if (root != ROOT_DIR_INUM) {
         return -1;
@@ -72,13 +72,13 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
         return -1;
     }
 
-    // skip the initial '/' character
+    // Skip the initial '/' character.
     name++;
     return find_in_dir(root_inode, name);
 }
 
 int tfs_open(char const *name, tfs_file_mode_t mode) {
-    // Checks if the path name is valid
+    // Checks if the path name is valid.
     if (!valid_pathname(name)) {
         return -1;
     }
@@ -87,7 +87,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     size_t offset;
 
     if (inum >= 0) {
-        // The file already exists
+        // The file already exists.
         inode_t *inode = inode_get(inum, false);
         ALWAYS_ASSERT(inode != NULL,
                     "tfs_open: directory files must have an inode");
@@ -97,14 +97,14 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         if (inode->i_node_type == T_SYMLINK) {
             return tfs_open(inode->sym_path, mode);
         }
-        // Truncate (if requested)
+        // Truncate (if requested).
         if (mode & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
                 data_block_free(inode->i_data_block);
                 inode->i_size = 0;
             }
         }
-        // Determine initial offset
+        // Determine initial offset.
         if (mode & TFS_O_APPEND) {
             offset = inode->i_size;
         }
@@ -113,19 +113,19 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         }
     }
     else if (mode & TFS_O_CREAT) {
-        // The file does not exist; the mode specified that it should be created
-        // Create inode
+        // The file does not exist; the mode specified that it should be created.
+        // Create inode.
         inum = inode_create(T_FILE);
         if (inum == -1)
         {
-            return -1; // no space in inode table
+            return -1; // No space in inode table.
         }
 
         // Add entry in the root directory
         if (add_dir_entry(root_inode(false), name + 1, inum) == -1)
         {
             inode_delete(inum);
-            return -1; // no space in directory
+            return -1; // No space in directory.
         }
 
         offset = 0;
@@ -135,7 +135,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     }
 
     // Finally, add entry to the open file table and return the corresponding
-    // handle
+    // handle.
     return add_to_open_file_table(inum, offset);
 
     // Note: for simplification, if file was created with TFS_O_CREAT and there
