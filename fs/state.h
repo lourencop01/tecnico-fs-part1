@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <pthread.h>
 
 /**
  * Directory entry
@@ -31,6 +32,8 @@ typedef struct {
     int hard_link_counter;
 
     char *sym_path;
+
+    pthread_rwlock_t inode_lock;
     // in a more complete FS, more fields could exist here
 } inode_t;
 
@@ -48,6 +51,9 @@ typedef enum {
 typedef struct {
     int of_inumber;
     size_t of_offset;
+
+    pthread_mutex_t open_file_lock;
+
 } open_file_entry_t;
 
 int state_init(tfs_params);
@@ -57,7 +63,16 @@ size_t state_block_size(void);
 
 int inode_create(inode_type n_type);
 void inode_delete(int inumber);
-inode_t *inode_get(int inumber);
+/**
+ * Obtain a pointer to an inode from its inumber.
+ *
+ * Input:
+ *   - inumber: inode's number
+ *   - mode: true for read; false for write;
+ *
+ * Returns pointer to inode.
+ */
+inode_t *inode_get(int inumber, bool mode);
 
 int clear_dir_entry(inode_t *inode, char const *sub_name);
 int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber);
@@ -79,8 +94,11 @@ open_file_entry_t *get_open_file_entry(int fhandle);
 bool is_file_open(int inumber);
 
 /**
- *Returns a pointer to the root inode.
+ * Returns a pointer to the root inode.
+ *
+ * Input:
+ *      - mode: true for read; false for write;
  */
-inode_t *root_inode();
+inode_t *root_inode(bool mode);
 
 #endif // STATE_H
