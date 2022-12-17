@@ -349,7 +349,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
-        pthread_rwlock_unlock(&inode->inode_lock);
+        pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
         return -1; // Not a directory.
     }
 
@@ -368,7 +368,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
             
         }
     }
-    pthread_rwlock_unlock(&inode->inode_lock);
+    pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
     return -1; // Entry not found.
 }
 

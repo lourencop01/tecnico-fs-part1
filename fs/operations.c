@@ -73,13 +73,13 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
             " to the root inode.");
 
     if (!valid_pathname(name)) {
-        pthread_rwlock_unlock(&root_inode->inode_lock);
+        pthread_rwlock_unlock((pthread_rwlock_t*)&root_inode->inode_lock);
         return -1;
     }
 
     // Skip the initial '/' character.
     name++;
-    pthread_rwlock_unlock(&root_inode->inode_lock);
+    pthread_rwlock_unlock((pthread_rwlock_t *)&root_inode->inode_lock);
     return find_in_dir(root_inode, name);
 }
 
@@ -415,7 +415,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         file->of_offset += to_read;
     }
 
-    pthread_rwlock_unlock(&inode->inode_lock);
+    pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
     pthread_mutex_unlock(&file->open_file_lock);
 
     return (ssize_t)to_read;
