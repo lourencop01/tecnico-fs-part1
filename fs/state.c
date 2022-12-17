@@ -129,6 +129,10 @@ int state_init(tfs_params params)
 
 int state_destroy(void)
 {
+    pthread_mutex_destroy(&inode_table_lock);
+    pthread_mutex_destroy(&open_file_table_lock);
+    pthread_mutex_destroy(&data_block_table_lock);
+
     free(inode_table);
     free(freeinode_ts);
     free(fs_data);
@@ -259,6 +263,7 @@ void inode_delete(int inumber) {
                   "inode_delete: inode already freed");
 
     if (inode_table[inumber].i_size > 0) {
+        pthread_rwlock_destroy(&inode_table[inumber].inode_lock);
         data_block_free(inode_table[inumber].i_data_block);
     }
 
@@ -307,11 +312,13 @@ int clear_dir_entry(inode_t *inode, char const *sub_name) {
 
 int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
     if (strlen(sub_name) == 0 || strlen(sub_name) > MAX_FILE_NAME - 1) {
+        pthread_rwlock_unlock(&inode->inode_lock);
         return -1; // Invalid sub_name.
     }
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
+        pthread_rwlock_unlock(&inode->inode_lock);
         return -1; // Not a directory.
     }
 
@@ -322,16 +329,17 @@ int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
 
     // Finds and fills the first empty entry.
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
-        //TRINCO?
         if (dir_entry[i].d_inumber == -1) {
             dir_entry[i].d_inumber = sub_inumber;
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = '\0';
 
+            pthread_rwlock_unlock(&inode->inode_lock);
             return 0;
         }
     }
 
+    pthread_rwlock_unlock(&inode->inode_lock);
     return -1; // No space for entry.
 }
 
@@ -341,6 +349,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
+        pthread_rwlock_unlock(&inode->inode_lock);
         return -1; // Not a directory.
     }
 
@@ -359,6 +368,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
             
         }
     }
+    pthread_rwlock_unlock(&inode->inode_lock);
     return -1; // Entry not found.
 }
 
@@ -425,6 +435,10 @@ void remove_from_open_file_table(int fhandle) {
 
     ALWAYS_ASSERT(free_open_file_entries[fhandle] == TAKEN,
                   "remove_from_open_file_table: file handle must be taken");
+
+    // Destroy the open file's lock.
+    pthread_mutex_unlock(&open_file_table[fhandle].open_file_lock);
+    pthread_mutex_destroy(&open_file_table[fhandle].open_file_lock);
 
     free_open_file_entries[fhandle] = FREE;
 }
