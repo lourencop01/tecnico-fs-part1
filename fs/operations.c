@@ -74,7 +74,9 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
     " correspond to the root inode.");
 
     if (!valid_pathname(name)) {
-        pthread_rwlock_unlock((pthread_rwlock_t*)&root_inode->inode_lock);
+        ALWAYS_ASSERT(
+            pthread_rwlock_unlock((pthread_rwlock_t*)&root_inode->inode_lock) == 0,
+            "Could not unlock the root inode.");
         return -1;
     }
 
@@ -103,7 +105,8 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         // Checks if the inode belongs to a symbolic link and recursively
         // looks for the final target.
         if (inode->i_node_type == T_SYMLINK) {
-            pthread_rwlock_unlock(&inode->inode_lock); //TODO: DUVIDA PROF
+            ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+            "Could not unlock the inode."); //TODO: DUVIDA PROF
             // TODO: pthread_mutex_unlock(&tfs_open_lock);
             return tfs_open(inode->sym_path, mode);
         }
@@ -121,7 +124,9 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         else {
             offset = 0;
         }
-        pthread_rwlock_unlock(&inode->inode_lock);
+        
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+            "Could not unlock the inode.");
         //TODOpthread_mutex_unlock(&tfs_open_lock);
     }
     else if (mode & TFS_O_CREAT) {
@@ -197,7 +202,8 @@ int tfs_sym_link(char const *target, char const *link_name) {
     // Copy the target path to the sym_path variable in the inode.
     link_inode->sym_path = (char *)malloc(strlen(target));
     strcpy(link_inode->sym_path, target);
-    pthread_rwlock_unlock(&link_inode->inode_lock);
+    ALWAYS_ASSERT(pthread_rwlock_unlock(&link_inode->inode_lock) == 0,
+            "Could not unlock the link inode.");
 
     // Remove the '/' from the link name
     link_name++;
@@ -245,7 +251,8 @@ int tfs_link(char const *target, char const *link_name) {
     if (target_inode->i_node_type == T_SYMLINK) {
         fprintf(stderr, "Unable to proceed. Reason: target file is a "
                     "soft link.\n");
-        pthread_rwlock_unlock(&target_inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+            "Could not unlock the target inode.");
         return -1;
     }
 
@@ -259,13 +266,15 @@ int tfs_link(char const *target, char const *link_name) {
         fprintf(stderr, "There was a problem adding %s to the root directory."
                     "\n", link_name);
 
-        pthread_rwlock_unlock(&target_inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+            "Could not unlock the target inode.");
         return -1;
     }
 
     // Increases the target file's hard link count by 1.
     target_inode->hard_link_counter++;
-    pthread_rwlock_unlock(&target_inode->inode_lock);
+    ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+            "Could not unlock the target inode.");
 
     return 0;
 }
@@ -292,27 +301,30 @@ int tfs_unlink(char const *target) {
          if (is_file_open(target_inumber)) {
             fprintf(stderr, "The file you are trying to delete is currently "
                         " open. Please close it and try again.\n");
-
-            pthread_rwlock_unlock(&target_inode->inode_lock);
+            ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+                        "Could not unlock the target inode.");
             return -1;
         }
-
-        pthread_rwlock_unlock(&target_inode->inode_lock);
+        //TODO: PQ E Q METEMOS O UNLLOCK EM TODOS EM VEZ DE SO NO FIM?
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+                    "Could not unlock the target inode.");
         inode_delete(target_inumber);
 
     // Checks if the target inode is a symbolic link.
     } else if (target_inode->i_node_type == T_SYMLINK) {
-        pthread_rwlock_unlock(&target_inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+                    "Could not unlock the target inode.");
         inode_delete(target_inumber);
 
     // Else, if the target inode still has multiple hard links, decreases its
     // count by 1.
     } else if (target_inode->hard_link_counter > 1) {
         target_inode->hard_link_counter--;
-        pthread_rwlock_unlock(&target_inode->inode_lock);
-
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+                    "Could not unlock the target inode.");
     } else {
-        pthread_rwlock_unlock(&target_inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&target_inode->inode_lock) == 0,
+                    "Could not unlock the target inode.");
         return -1;
     }
 
@@ -330,7 +342,8 @@ int tfs_unlink(char const *target) {
 int tfs_close(int fhandle) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
-        pthread_mutex_unlock(&file->open_file_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                        "Could not unlock the file's lock.");
         return -1; // Invalid fd.
     }
 
@@ -341,7 +354,8 @@ int tfs_close(int fhandle) {
 ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
-        pthread_mutex_unlock(&file->open_file_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                        "Could not unlock the file's lock.");
         return -1;
     }
 
@@ -360,8 +374,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             // If empty file, allocate new block
             int bnum = data_block_alloc();
             if (bnum == -1) {
-                pthread_rwlock_unlock(&inode->inode_lock);
-                pthread_mutex_unlock(&file->open_file_lock);
+                ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+                                "Could not unlock the inode lock.");
+                ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                                "Could not unlock the file's lock.");
                 return -1; // no space
             }
 
@@ -380,8 +396,11 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             inode->i_size = file->of_offset;
         }
     }
-    pthread_rwlock_unlock(&inode->inode_lock);
-    pthread_mutex_unlock(&file->open_file_lock);
+
+    ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+                    "Could not unlock the inode lock.");
+    ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                    "Could not unlock the file's lock.");
 
     return (ssize_t)to_write;
 }
@@ -389,7 +408,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
-        pthread_mutex_unlock(&file->open_file_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                    "Could not unlock the file's lock.");
         return -1;
     }
 
@@ -413,8 +433,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         file->of_offset += to_read;
     }
 
-    pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
-    pthread_mutex_unlock(&file->open_file_lock);
+    ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0,
+                    "Could not unlock the file's lock.");
+    ALWAYS_ASSERT(pthread_mutex_unlock(&file->open_file_lock) == 0,
+                    "Could not unlock the file's lock.");
 
     return (ssize_t)to_read;
 }

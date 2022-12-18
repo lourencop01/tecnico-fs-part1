@@ -168,7 +168,8 @@ static int inode_alloc(void)
         }
 
         // Locks the following code to prevent parallel access.
-        pthread_mutex_lock(&inode_table_lock);
+        ALWAYS_ASSERT(pthread_mutex_lock(&inode_table_lock) == 0, 
+                    "The inode table could't be locked");
 
         // Finds first free entry in inode table.
 
@@ -178,12 +179,14 @@ static int inode_alloc(void)
             freeinode_ts[inumber] = TAKEN;
             
             // Unlocks the code so that other tasks can perform it.
-            pthread_mutex_unlock(&inode_table_lock);
+            ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, 
+                    "The inode table could't be unlocked");
             return (int)inumber;
         }
 
         // Unlocks the code so that other tasks can perform it.
-        pthread_mutex_unlock(&inode_table_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, 
+                    "The inode table could't be unlocked");
     }
      
     // No free inodes were found.
@@ -209,7 +212,9 @@ int inode_create(inode_type i_type)
     inode->i_node_type = i_type;
 
     // Initializes the inode's lock.
-    pthread_rwlock_init(&inode->inode_lock, NULL);
+    ALWAYS_ASSERT(pthread_rwlock_init(&inode->inode_lock, NULL) == 0, 
+                    "The inode's lock could not be initialized.");
+    
 
     switch (i_type) {
     case T_DIRECTORY: {
@@ -265,7 +270,8 @@ void inode_delete(int inumber) {
                   "inode_delete: inode already freed");
 
     if (inode_table[inumber].i_size > 0) {
-        pthread_rwlock_destroy(&inode_table[inumber].inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_destroy(&inode_table[inumber].inode_lock) == 0, 
+                    "The inode's lock could not be destroyed.");
         data_block_free(inode_table[inumber].i_data_block);
     }
 
@@ -278,10 +284,13 @@ inode_t *inode_get(int inumber, bool mode) {
     insert_delay(); // Simulate storage access delay to inode.
     // If mode is on read (true), lock on read. Else, write lock.
     if(mode) {
-        pthread_rwlock_rdlock(&inode_table[inumber].inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_rdlock(&inode_table[inumber].inode_lock) == 0, 
+                    "The inode's lock could not be rdlocked.");
     } 
     else if (!mode) {
-        pthread_rwlock_wrlock(&inode_table[inumber].inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_wrlock(&inode_table[inumber].inode_lock) == 0, 
+                    "The inode's lock could not be wrlocked.");
+        
         
     } else {
         return NULL;
@@ -314,13 +323,16 @@ int clear_dir_entry(inode_t *inode, char const *sub_name) {
 
 int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
     if (strlen(sub_name) == 0 || strlen(sub_name) > MAX_FILE_NAME - 1) {
-        pthread_rwlock_unlock(&inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
+        
         return -1; // Invalid sub_name.
     }
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
-        pthread_rwlock_unlock(&inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
         return -1; // Not a directory.
     }
 
@@ -336,12 +348,14 @@ int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = '\0';
 
-            pthread_rwlock_unlock(&inode->inode_lock);
+            ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
             return 0;
         }
     }
 
-    pthread_rwlock_unlock(&inode->inode_lock);
+    ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
     return -1; // No space for entry.
 }
 
@@ -351,7 +365,8 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
-        pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
+        ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
         return -1; // Not a directory.
     }
 
@@ -366,12 +381,14 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
         if ((dir_entry[i].d_inumber != -1) &&
             (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
             int sub_inumber = dir_entry[i].d_inumber;
-            pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
+            ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
             return sub_inumber;
             
         }
     }
-    pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
+    ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
+                    "The inode's lock could not be unlocked.");
     return -1; // Entry not found.
 }
 
@@ -382,14 +399,19 @@ int data_block_alloc(void) {
         }
         
         // Locks the data block table to prevent parallelism.
-        pthread_mutex_lock(&data_block_table_lock);
+        ALWAYS_ASSERT(pthread_mutex_lock(&data_block_table_lock) == 0, 
+                    "The data block table's lock could not be locked.");
+        
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
 
-            pthread_mutex_unlock(&data_block_table_lock);
+            ALWAYS_ASSERT(pthread_mutex_unlock(&data_block_table_lock) == 0, 
+                    "The data block table's lock could not be unlocked.");
             return (int)i;
         }
-        pthread_mutex_unlock(&data_block_table_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&data_block_table_lock) == 0, 
+                    "The data block table's lock could not be unlocked.");
+        
     }
     return -1;
 }
@@ -415,19 +437,24 @@ int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
 
         // Locks the open file table to prevent parallelism.
-        pthread_mutex_lock(&open_file_table_lock); 
+        ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table_lock) == 0, 
+                    "The open file table's lock could not be locked.");
+
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
 
             // Initializes the open file's lock.
-            pthread_mutex_init(&open_file_table[i].open_file_lock, NULL);
+            ALWAYS_ASSERT(pthread_mutex_init(&open_file_table[i].open_file_lock, NULL) == 0, 
+                    "The open file's lock could not be initialized.");
 
-            pthread_mutex_unlock(&open_file_table_lock);
+            ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0, 
+                    "The open file table's lock could not be unlocked.");
             return i;
         }
-        pthread_mutex_unlock(&open_file_table_lock);
+        ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0, 
+                    "The open file table's lock could not be unlocked.");
     }
     return -1;
 }
@@ -439,16 +466,20 @@ void remove_from_open_file_table(int fhandle) {
     ALWAYS_ASSERT(free_open_file_entries[fhandle] == TAKEN,
                   "remove_from_open_file_table: file handle must be taken");
 
+    ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table[fhandle].open_file_lock) == 0, 
+                    "The open file's lock could not be unlocked.");
+
     // Destroy the open file's lock.
-    pthread_mutex_unlock(&open_file_table[fhandle].open_file_lock);
-    pthread_mutex_destroy(&open_file_table[fhandle].open_file_lock);
+    ALWAYS_ASSERT(pthread_mutex_destroy(&open_file_table[fhandle].open_file_lock) == 0, 
+                    "The open file's lock could not be destroyed.");
 
     free_open_file_entries[fhandle] = FREE;
 
 }
 
 open_file_entry_t *get_open_file_entry(int fhandle) {
-    pthread_mutex_lock(&open_file_table[fhandle].open_file_lock);
+    ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table[fhandle].open_file_lock) == 0, 
+                    "The open file's lock could not be locked.");
     if (!valid_file_handle(fhandle)) {
         return NULL;
     }
