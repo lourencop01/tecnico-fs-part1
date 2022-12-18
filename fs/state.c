@@ -303,6 +303,8 @@ inode_t *inode_get(int inumber, bool mode) {
 int clear_dir_entry(inode_t *inode, char const *sub_name) {
     insert_delay();
     if (inode->i_node_type != T_DIRECTORY) {
+        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+                      "Could not unlock the root inode's lock.");
         return -1; // not a directory
     }
 
@@ -315,9 +317,13 @@ int clear_dir_entry(inode_t *inode, char const *sub_name) {
         if (!strcmp(dir_entry[i].d_name, sub_name)) {
             dir_entry[i].d_inumber = -1;
             memset(dir_entry[i].d_name, 0, MAX_FILE_NAME);
+            ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+                          "Could not unlock the root inode's lock.");
             return 0;
         }
     }
+    ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
+                  "Could not unlock the root inode's lock.");
     return -1; // sub_name not found.
 }
 
