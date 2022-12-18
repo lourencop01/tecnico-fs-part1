@@ -444,6 +444,7 @@ void remove_from_open_file_table(int fhandle) {
     pthread_mutex_destroy(&open_file_table[fhandle].open_file_lock);
 
     free_open_file_entries[fhandle] = FREE;
+
 }
 
 open_file_entry_t *get_open_file_entry(int fhandle) {
@@ -461,7 +462,8 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
 
 bool is_file_open(int inumber) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-        if (open_file_table[i].of_inumber == inumber) {
+        if (open_file_table[i].of_inumber == inumber &&
+                    free_open_file_entries[i] == TAKEN) {
             return true;
         }
     }

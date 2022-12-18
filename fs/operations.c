@@ -91,7 +91,6 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     }
 
     //TODO :pthread_mutex_lock(&tfs_open_lock);
-
     int inum = tfs_lookup(name, root_inode(true));
     size_t offset;
 
@@ -151,7 +150,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 
     // Finally, add entry to the open file table and return the corresponding
     // handle.
-    //TODOpthread_mutex_unlock(&tfs_open_lock);
+    //TODO pthread_mutex_unlock(&tfs_open_lock);
     return add_to_open_file_table(inum, offset);
 
     // Note: for simplification, if file was created with TFS_O_CREAT and there
@@ -286,30 +285,23 @@ int tfs_unlink(char const *target) {
     inode_t *target_inode = inode_get(target_inumber, false);
     ALWAYS_ASSERT(target_inode != NULL, "Target inode was not found.\n");
 
-    // Removes the "/" from the target name.
-    target++;
-
-    // Removes the target entry from the directory's entries while
-    // assessing if it has been done correctly.
-    ALWAYS_ASSERT(clear_dir_entry(root_inode(false), target) == 0, "Could not "
-                "remove the link file from the directory.");
-
-    // Checks if the target inode is a symbolic link, or if the hard link
-    // counter is equal to one and, if so, it will delete the target inode.
-    if (target_inode->i_node_type == T_SYMLINK) {
-        pthread_rwlock_unlock(&target_inode->inode_lock);
-        inode_delete(target_inumber);
-
-    } else if (target_inode->hard_link_counter == 1) {
-        // TODO: VERIFICAR ESTA FUNÇAO
-        /* if (is_file_open(target_inumber)) {
+    // Option where the file is completely removed and won't be accesible
+    // anymore.
+    if (target_inode->hard_link_counter == 1 &&
+                target_inode->i_node_type != T_SYMLINK) {
+         if (is_file_open(target_inumber)) {
             fprintf(stderr, "The file you are trying to delete is currently "
                         " open. Please close it and try again.\n");
 
             pthread_rwlock_unlock(&target_inode->inode_lock);
             return -1;
-        } */
+        }
 
+        pthread_rwlock_unlock(&target_inode->inode_lock);
+        inode_delete(target_inumber);
+
+    // Checks if the target inode is a symbolic link.
+    } else if (target_inode->i_node_type == T_SYMLINK) {
         pthread_rwlock_unlock(&target_inode->inode_lock);
         inode_delete(target_inumber);
 
@@ -323,6 +315,14 @@ int tfs_unlink(char const *target) {
         pthread_rwlock_unlock(&target_inode->inode_lock);
         return -1;
     }
+
+    // Removes the "/" from the target name.
+    target++;
+
+    // Removes the target entry from the directory's entries while
+    // assessing if it has been done correctly.
+    ALWAYS_ASSERT(clear_dir_entry(root_inode(false), target) == 0, "Could not "
+                "remove the link file from the directory.");
 
     return 0;
 }
