@@ -35,6 +35,7 @@ int tfs_init(tfs_params const *params_ptr) {
         return -1;
     }
 
+    
     // Create root inode.
     int root = inode_create(T_DIRECTORY);
     if (root != ROOT_DIR_INUM) {
@@ -69,8 +70,8 @@ static bool valid_pathname(char const *name) {
  */
 static int tfs_lookup(char const *name, inode_t const *root_inode) {
 
-    ALWAYS_ASSERT(root_inode->i_data_block == 0, "The inode_t argument does not correspond"
-            " to the root inode.");
+    ALWAYS_ASSERT(root_inode->i_data_block == 0, "The inode_t argument does not"
+    " correspond to the root inode.");
 
     if (!valid_pathname(name)) {
         pthread_rwlock_unlock((pthread_rwlock_t*)&root_inode->inode_lock);
@@ -79,7 +80,6 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
 
     // Skip the initial '/' character.
     name++;
-    pthread_rwlock_unlock((pthread_rwlock_t *)&root_inode->inode_lock);
     return find_in_dir(root_inode, name);
 }
 
@@ -144,7 +144,6 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
             //TODOpthread_mutex_unlock(&tfs_open_lock);
             return -1; // No space in directory.
         }
-
         offset = 0;
     }
     else {
@@ -442,7 +441,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
         fprintf(stderr, "Destination file creation error.\n");
         return -1;
     }
-
+ 
     // Reads the first line of the source file and stores it in the buffer.
     // The number of bytes read is stored in bytes_read.
     size_t bytes_read = fread(buffer, 1, SIZE_OF_BUFFER, source_fp);
@@ -476,7 +475,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     ALWAYS_ASSERT(fclose(source_fp) == 0,
                   "There was a problem closing the source file.");
     ALWAYS_ASSERT(tfs_close(dest_fp) == 0,
-                  "There was a problem closing the destination file.");
+                  "There was a problem closing the destination file."); 
 
     return 0;
 }

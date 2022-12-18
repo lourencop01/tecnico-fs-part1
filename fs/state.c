@@ -160,7 +160,7 @@ int state_destroy(void)
  *   - No free slots in inode table.
  */
 static int inode_alloc(void)
-{
+{  
     for (size_t inumber = 0; inumber < INODE_TABLE_SIZE; inumber++) {
         if ((inumber * sizeof(allocation_state_t) % BLOCK_SIZE) == 0) {
             // Simulate storage access delay (to freeinode_ts).
@@ -171,6 +171,7 @@ static int inode_alloc(void)
         pthread_mutex_lock(&inode_table_lock);
 
         // Finds first free entry in inode table.
+
         if (freeinode_ts[inumber] == FREE) {
 
             // Found a free entry, so takes it for the new inode.
@@ -180,11 +181,11 @@ static int inode_alloc(void)
             pthread_mutex_unlock(&inode_table_lock);
             return (int)inumber;
         }
-    }
 
-    // Unlocks the code so that other tasks can perform it.
-    pthread_mutex_unlock(&inode_table_lock);
-    
+        // Unlocks the code so that other tasks can perform it.
+        pthread_mutex_unlock(&inode_table_lock);
+    }
+     
     // No free inodes were found.
     return -1;
 }
@@ -193,6 +194,7 @@ int inode_create(inode_type i_type)
 {
     // Allocates a new inode. 
     // Returns -1 if there are no free slots in inode table.
+    
     int inumber = inode_alloc();
     if (inumber == -1) {
         return -1; 
@@ -274,16 +276,16 @@ inode_t *inode_get(int inumber, bool mode) {
     ALWAYS_ASSERT(valid_inumber(inumber), "inode_get: invalid inumber");
     
     insert_delay(); // Simulate storage access delay to inode.
-
     // If mode is on read (true), lock on read. Else, write lock.
     if(mode) {
         pthread_rwlock_rdlock(&inode_table[inumber].inode_lock);
     } 
     else if (!mode) {
         pthread_rwlock_wrlock(&inode_table[inumber].inode_lock);
+        
     } else {
         return NULL;
-    }
+    } 
 
     return &inode_table[inumber];
 }
@@ -386,8 +388,8 @@ int data_block_alloc(void) {
             pthread_mutex_unlock(&data_block_table_lock);
             return (int)i;
         }
+        pthread_mutex_unlock(&data_block_table_lock);
     }
-    pthread_mutex_unlock(&data_block_table_lock);
     return -1;
 }
 
@@ -424,8 +426,8 @@ int add_to_open_file_table(int inumber, size_t offset) {
             pthread_mutex_unlock(&open_file_table_lock);
             return i;
         }
+        pthread_mutex_unlock(&open_file_table_lock);
     }
-    pthread_mutex_unlock(&open_file_table_lock);
     return -1;
 }
 
