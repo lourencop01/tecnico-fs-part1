@@ -85,6 +85,7 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
 
 int tfs_open(char const *name, tfs_file_mode_t mode) {
     // Checks if the path name is valid.
+
     if (!valid_pathname(name)) {
         return -1;
     }
@@ -113,18 +114,15 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
                 data_block_free(inode->i_data_block);
                 inode->i_size = 0;
             }
-            pthread_rwlock_unlock(&inode->inode_lock);
         }
         // Determine initial offset.
         if (mode & TFS_O_APPEND) {
             offset = inode->i_size;
-            pthread_rwlock_unlock(&inode->inode_lock);
         }
         else {
             offset = 0;
-            pthread_rwlock_unlock(&inode->inode_lock);
         }
-
+        pthread_rwlock_unlock(&inode->inode_lock);
         //TODOpthread_mutex_unlock(&tfs_open_lock);
     }
     else if (mode & TFS_O_CREAT) {
@@ -303,13 +301,14 @@ int tfs_unlink(char const *target) {
         inode_delete(target_inumber);
 
     } else if (target_inode->hard_link_counter == 1) {
-        if (is_file_open(target_inumber)) {
+        // TODO: VERIFICAR ESTA FUNÇAO
+        /* if (is_file_open(target_inumber)) {
             fprintf(stderr, "The file you are trying to delete is currently "
                         " open. Please close it and try again.\n");
 
             pthread_rwlock_unlock(&target_inode->inode_lock);
             return -1;
-        }
+        } */
 
         pthread_rwlock_unlock(&target_inode->inode_lock);
         inode_delete(target_inumber);

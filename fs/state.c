@@ -366,6 +366,7 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
         if ((dir_entry[i].d_inumber != -1) &&
             (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
             int sub_inumber = dir_entry[i].d_inumber;
+            pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock);
             return sub_inumber;
             
         }
@@ -446,6 +447,7 @@ void remove_from_open_file_table(int fhandle) {
 }
 
 open_file_entry_t *get_open_file_entry(int fhandle) {
+    pthread_mutex_lock(&open_file_table[fhandle].open_file_lock);
     if (!valid_file_handle(fhandle)) {
         return NULL;
     }
@@ -454,7 +456,6 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
         return NULL;
     }
 
-    pthread_mutex_lock(&open_file_table[fhandle].open_file_lock);
     return &open_file_table[fhandle];
 }
 
