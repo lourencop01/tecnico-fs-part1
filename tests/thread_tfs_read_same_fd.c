@@ -25,7 +25,7 @@ void* read(void* fhandle) {
     ssize_t r; 
 
     while ((r = tfs_read(f, buffer, sizeof(buffer))) > 0) {
-        strncat(final, buffer, r);
+        strncat(final, buffer, (size_t)r);
     }
     
     return NULL;

@@ -466,6 +466,10 @@ int add_to_open_file_table(int inumber, size_t offset) {
 }
 
 void remove_from_open_file_table(int fhandle) {
+    // Locks the open file table to prevent parallelism.
+    ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table_lock) == 0,
+                  "The open file table's lock could not be locked.");
+
     ALWAYS_ASSERT(valid_file_handle(fhandle),
                   "remove_from_open_file_table: file handle must be valid");
 
@@ -481,6 +485,8 @@ void remove_from_open_file_table(int fhandle) {
 
     free_open_file_entries[fhandle] = FREE;
 
+    ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0,
+                  "The open file table's lock could not be unlocked.");
 }
 
 open_file_entry_t *get_open_file_entry(int fhandle) {
