@@ -8,15 +8,24 @@
 
 #define THREADS 15
 
+/*
+This program tests if the tfs_read function is
+thread-safe by making THREADS threads reading from
+the same file descriptor. If the it wasn't thread-
+-safe, in the final string duplicates would show.
+*/
+
+char final[100];
+
 void* read(void* fhandle) {
 
     int f = *(int*)fhandle;
 
-    char buffer[2];
+    char buffer[1];
     ssize_t r; 
 
-    while ((r = tfs_read(f, buffer, sizeof(buffer)-1)) > 0) {
-        printf("%s", buffer);
+    while ((r = tfs_read(f, buffer, sizeof(buffer))) > 0) {
+        strncat(final, buffer, r);
     }
     
     return NULL;
@@ -24,7 +33,7 @@ void* read(void* fhandle) {
 
 int main() {
 
-    //char *str_ext_file = "123456789abcdefghijklmnopqrstuvwxyz";
+    char *str_ext_file = "123456789abcdefghijklmnopqrstuvwxyz";
     char *path_copied_file = "/f1";
     char *path_src = "tests/tfs_read.txt";
     pthread_t tid[THREADS];
@@ -49,6 +58,9 @@ int main() {
     }
  
     tfs_close(f);
+
+    assert(strlen(final)==strlen(str_ext_file));
+    printf("Successful test.\n");
     return 0;
 
 }
