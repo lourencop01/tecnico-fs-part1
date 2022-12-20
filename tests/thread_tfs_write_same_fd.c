@@ -1,4 +1,4 @@
-/* #include "../fs/operations.h"
+#include "../fs/operations.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -6,21 +6,24 @@
 #include <string.h>
 #include <pthread.h>
 
-#define THREADS 15
+#define THREADS 20
+#define BUFFER 100
 
-char final[100];
-int i = 0;
+/*
+This test tests if the tfs_write function is
+thread-safe. It tries to use differente threads
+all writing to the same file through the same 
+file descriptor. If it weren't thread-safe, some
+character may get overriden. Hence, the last
+assertion must be verified.
+*/
+
+char *str_ext_file = "1234";
 
 void* write(void* fhandle) {
-
-    char *str_ext_file = "123456789abcdefghijklmnopqrstuvwxyz";
     int f = *(int*)fhandle;
-
-    char buffer[1];
-    ssize_t r;
-
-    while ((r = tfs_write(f, str_ext_file[i++], sizeof(buffer))) > 0) {
-    }
+    
+    assert(tfs_write(f, str_ext_file, strlen(str_ext_file)) != -1);
     
     return NULL;
 }
@@ -28,7 +31,8 @@ void* write(void* fhandle) {
 int main() {
 
     char *path = "/f1";
-    char *path_src = "tests/tfs_read.txt";
+    char buffer[BUFFER];
+    memset(buffer, 0, BUFFER);
     pthread_t tid[THREADS];
 
     assert(tfs_init(NULL) != -1);
@@ -45,11 +49,19 @@ int main() {
     for (int i = 0; i < THREADS; i++){
         pthread_join(tid[i], NULL);
     }
- 
-    tfs_close(f);
 
-    assert(strlen(final)==strlen(str_ext_file));
+    assert(tfs_close(f) == 0);
+
+    int fd = tfs_open(path, 0);
+    assert(fd != -1);
+
+    assert(tfs_read(fd, buffer, BUFFER) != -1);
+    
+    assert(tfs_close(fd) == 0);
+
+    assert(strlen(buffer) == (THREADS * strlen(str_ext_file)));
+
     printf("Successful test.\n");
-    return 0;
 
-} */
+    return 0;
+}
