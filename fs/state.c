@@ -104,8 +104,7 @@ int state_init(tfs_params params)
     fs_data = malloc(DATA_BLOCKS * BLOCK_SIZE);
     free_blocks = malloc(DATA_BLOCKS * sizeof(allocation_state_t));
     open_file_table = malloc(MAX_OPEN_FILES * sizeof(open_file_entry_t));
-    free_open_file_entries =
-        malloc(MAX_OPEN_FILES * sizeof(allocation_state_t));
+    free_open_file_entries = malloc(MAX_OPEN_FILES * sizeof(allocation_state_t));
     
     if (!inode_table || !freeinode_ts || !fs_data || !free_blocks ||
         !open_file_table || !free_open_file_entries) {
@@ -168,8 +167,7 @@ static int inode_alloc(void)
         }
 
         // Locks the following code to prevent parallel access.
-        ALWAYS_ASSERT(pthread_mutex_lock(&inode_table_lock) == 0, 
-                    "The inode table could't be locked");
+        ALWAYS_ASSERT(pthread_mutex_lock(&inode_table_lock) == 0, "The inode table could't be locked");
 
         // Finds first free entry in inode table.
 
@@ -179,14 +177,12 @@ static int inode_alloc(void)
             freeinode_ts[inumber] = TAKEN;
             
             // Unlocks the code so that other tasks can perform it.
-            ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, 
-                    "The inode table could't be unlocked");
+            ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, "The inode table could't be unlocked");
             return (int)inumber;
         }
 
         // Unlocks the code so that other tasks can perform it.
-        ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, 
-                    "The inode table could't be unlocked");
+        ALWAYS_ASSERT(pthread_mutex_unlock(&inode_table_lock) == 0, "The inode table could't be unlocked");
     }
      
     // No free inodes were found.
@@ -213,7 +209,7 @@ int inode_create(inode_type i_type)
 
     // Initializes the inode's lock.
     ALWAYS_ASSERT(pthread_rwlock_init(&inode->inode_lock, NULL) == 0, 
-                    "The inode's lock could not be initialized.");
+                "The inode's lock could not be initialized.");
     
 
     switch (i_type) {
@@ -236,8 +232,7 @@ int inode_create(inode_type i_type)
         inode_table[inumber].i_data_block = b;
 
         dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
-        ALWAYS_ASSERT(dir_entry != NULL,
-                      "inode_create: data block freed while in use");
+        ALWAYS_ASSERT(dir_entry != NULL, "inode_create: data block freed while in use");
 
         for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
             dir_entry[i].d_inumber = -1;
@@ -266,8 +261,7 @@ void inode_delete(int inumber) {
     //TODO: Lock aqui? Talvez. Correia faz sempre lock em condiçoes basicamente
     ALWAYS_ASSERT(valid_inumber(inumber), "inode_delete: invalid inumber");
 
-    ALWAYS_ASSERT(freeinode_ts[inumber] == TAKEN,
-                  "inode_delete: inode already freed");
+    ALWAYS_ASSERT(freeinode_ts[inumber] == TAKEN, "inode_delete: inode already freed");
 
     if (inode_table[inumber].i_size > 0) {
         ALWAYS_ASSERT(pthread_rwlock_destroy(&inode_table[inumber].inode_lock) == 0, 
@@ -303,49 +297,41 @@ inode_t *inode_get(int inumber, bool mode) {
 int clear_dir_entry(inode_t *inode, char const *sub_name) {
     insert_delay();
     if (inode->i_node_type != T_DIRECTORY) {
-        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
-                      "Could not unlock the root inode's lock.");
+        
         return -1; // not a directory
     }
 
     // Locates the block containing the entries of the directory.
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    ALWAYS_ASSERT(dir_entry != NULL,
-                  "clear_dir_entry: directory must have a data block");
+    ALWAYS_ASSERT(dir_entry != NULL, "clear_dir_entry: directory must have a data block");
 
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
         if (!strcmp(dir_entry[i].d_name, sub_name)) {
             dir_entry[i].d_inumber = -1;
             memset(dir_entry[i].d_name, 0, MAX_FILE_NAME);
-            ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
-                          "Could not unlock the root inode's lock.");
+
             return 0;
         }
     }
-    ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
-                  "Could not unlock the root inode's lock.");
+    
     return -1; // sub_name not found.
 }
 
 int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
     if (strlen(sub_name) == 0 || strlen(sub_name) > MAX_FILE_NAME - 1) {
-        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
         
         return -1; // Invalid sub_name.
     }
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
-        ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+        
         return -1; // Not a directory.
     }
 
     // Locates the block containing the entries of the directory.
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    ALWAYS_ASSERT(dir_entry != NULL,
-                  "add_dir_entry: directory must have a data block");
+    ALWAYS_ASSERT(dir_entry != NULL, "add_dir_entry: directory must have a data block");
 
     // Finds and fills the first empty entry.
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
@@ -354,14 +340,12 @@ int add_dir_entry(inode_t *inode, char const *sub_name, int sub_inumber) {
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = '\0';
 
-            ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+            
             return 0;
         }
     }
 
-    ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+    
     return -1; // No space for entry.
 }
 
@@ -371,15 +355,13 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
 
     insert_delay(); // Simulate storage access delay to inode with inumber.
     if (inode->i_node_type != T_DIRECTORY) {
-        ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+        
         return -1; // Not a directory.
     }
 
     // Locates the block containing the entries of the directory.
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    ALWAYS_ASSERT(dir_entry != NULL,
-                  "find_in_dir: directory inode must have a data block");
+    ALWAYS_ASSERT(dir_entry != NULL, "find_in_dir: directory inode must have a data block");
 
     // Iterates over the directory entries looking for one that has the target
     // name.
@@ -387,14 +369,12 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
         if ((dir_entry[i].d_inumber != -1) &&
             (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
             int sub_inumber = dir_entry[i].d_inumber;
-            ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+            
             return sub_inumber;
             
         }
     }
-    ALWAYS_ASSERT(pthread_rwlock_unlock((pthread_rwlock_t *)&inode->inode_lock) == 0, 
-                    "The inode's lock could not be unlocked.");
+    
     return -1; // Entry not found.
 }
 
@@ -412,7 +392,7 @@ int data_block_alloc(void) {
             free_blocks[i] = TAKEN;
 
             ALWAYS_ASSERT(pthread_mutex_unlock(&data_block_table_lock) == 0, 
-                    "The data block table's lock could not be unlocked.");
+                        "The data block table's lock could not be unlocked.");
             return (int)i;
         }
         ALWAYS_ASSERT(pthread_mutex_unlock(&data_block_table_lock) == 0, 
@@ -423,8 +403,7 @@ int data_block_alloc(void) {
 }
 
 void data_block_free(int block_number) {
-    ALWAYS_ASSERT(valid_block_number(block_number),
-                  "data_block_free: invalid block number");
+    ALWAYS_ASSERT(valid_block_number(block_number), "data_block_free: invalid block number");
 
     insert_delay(); // Simulate storage access delay to free_blocks.
 
@@ -432,8 +411,7 @@ void data_block_free(int block_number) {
 }
 
 void *data_block_get(int block_number) {
-    ALWAYS_ASSERT(valid_block_number(block_number),
-                  "data_block_get: invalid block number");
+    ALWAYS_ASSERT(valid_block_number(block_number), "data_block_get: invalid block number");
 
     insert_delay(); // Simulate storage access delay to block.
     return &fs_data[(size_t)block_number * BLOCK_SIZE];
@@ -453,10 +431,10 @@ int add_to_open_file_table(int inumber, size_t offset) {
 
             // Initializes the open file's lock.
             ALWAYS_ASSERT(pthread_mutex_init(&open_file_table[i].open_file_lock, NULL) == 0, 
-                    "The open file's lock could not be initialized.");
+                        "The open file's lock could not be initialized.");
 
             ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0, 
-                    "The open file table's lock could not be unlocked.");
+                        "The open file table's lock could not be unlocked.");
             return i;
         }
         ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0, 
@@ -466,32 +444,37 @@ int add_to_open_file_table(int inumber, size_t offset) {
 }
 
 void remove_from_open_file_table(int fhandle) {
-    // Locks the open file table to prevent parallelism.
-    ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table_lock) == 0,
-                  "The open file table's lock could not be locked.");
 
-    ALWAYS_ASSERT(valid_file_handle(fhandle),
-                  "remove_from_open_file_table: file handle must be valid");
-
+    // Locks the open file table
+    ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table_lock) == 0, 
+                "The open file table's lock could not be locked.");
+    // Validates the file handle
+    ALWAYS_ASSERT(valid_file_handle(fhandle), 
+                "remove_from_open_file_table: file handle must be valid");
+    // Asserts that the entry is taken
     ALWAYS_ASSERT(free_open_file_entries[fhandle] == TAKEN,
-                  "remove_from_open_file_table: file handle must be taken");
+                "remove_from_open_file_table: file handle must be taken");
 
+    // Unlocks the open file's lock
     ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table[fhandle].open_file_lock) == 0, 
-                    "The open file's lock could not be unlocked.");
+                "The open file's lock could not be unlocked.");
 
     // Destroy the open file's lock.
     ALWAYS_ASSERT(pthread_mutex_destroy(&open_file_table[fhandle].open_file_lock) == 0, 
-                    "The open file's lock could not be destroyed.");
+                "The open file's lock could not be destroyed.");
 
+    // Sets the entry as free
     free_open_file_entries[fhandle] = FREE;
 
-    ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0,
-                  "The open file table's lock could not be unlocked.");
+    // Unlocks the open file table
+    ALWAYS_ASSERT(pthread_mutex_unlock(&open_file_table_lock) == 0, 
+                "The open file table's lock could not be unlocked.");
+
 }
 
 open_file_entry_t *get_open_file_entry(int fhandle) {
     ALWAYS_ASSERT(pthread_mutex_lock(&open_file_table[fhandle].open_file_lock) == 0, 
-                    "The open file's lock could not be locked.");
+                "The open file's lock could not be locked.");
     if (!valid_file_handle(fhandle)) {
         return NULL;
     }
@@ -515,8 +498,7 @@ bool is_file_open(int inumber) {
 
 inode_t *root_inode(bool mode) {
     inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM, mode);
-    ALWAYS_ASSERT(root_dir_inode != NULL,
-                "tfs_open: root dir inode must exist");
+    ALWAYS_ASSERT(root_dir_inode != NULL, "tfs_open: root dir inode must exist");
     return root_dir_inode;
 }
 

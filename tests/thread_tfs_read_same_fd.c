@@ -59,6 +59,7 @@ int main() {
  
     tfs_close(f);
 
+    tfs_destroy();
     assert(strlen(final)==strlen(str_ext_file));
     printf("Successful test.\n");
     return 0;
