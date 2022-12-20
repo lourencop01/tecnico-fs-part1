@@ -8,7 +8,7 @@
 
 /* 
 This test tests if symbolic links are working
-properly, by creating a symbolic link to a file
+properly by creating a symbolic link to a file
 and another symbolic link to the previously 
 created symbolic link. Finally, the first link
 is deleted and an error occurs where we can't

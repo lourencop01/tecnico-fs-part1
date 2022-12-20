@@ -3,6 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+This test tests the permanent deletion
+of a file in the file system. The unlink
+function only returns unsuccessful if the
+target file is pointing to an inode with
+the hard link count = 1 and is not a 
+symbolic link.
+*/
+
 int main() {
     char *path = "/f1";
 
