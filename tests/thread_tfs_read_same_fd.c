@@ -60,7 +60,11 @@ int main() {
     tfs_close(f);
 
     tfs_destroy();
-    assert(strlen(final)==strlen(str_ext_file));
+
+    size_t final_size = strlen(final);
+    size_t size = strlen(str_ext_file);
+    assert(final_size == size);
+
     printf("Successful test.\n");
     return 0;
 
