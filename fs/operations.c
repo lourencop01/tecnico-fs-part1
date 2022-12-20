@@ -10,7 +10,6 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-//TODO ASSERTS NOS MUTEX E RDLOCKS TODOS
 
 tfs_params tfs_default_params() {
     tfs_params params = {
@@ -97,6 +96,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     size_t offset;
 
     if (inum >= 0) {
+
         // The file already exists.
         inode_t *inode = inode_get(inum, false);
         ALWAYS_ASSERT(inode != NULL,
@@ -105,9 +105,17 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         // Checks if the inode belongs to a symbolic link and recursively
         // looks for the final target.
         if (inode->i_node_type == T_SYMLINK) {
+
             ALWAYS_ASSERT(pthread_rwlock_unlock(&inode->inode_lock) == 0,
             "Could not unlock the inode."); //TODO: DUVIDA PROF
             // TODO: pthread_mutex_unlock(&tfs_open_lock);
+
+            if (tfs_lookup(inode->sym_path, root_inode(true)) == -1) {
+                fprintf(stderr, "The file linked to this symbolic"
+                                " link has been deleted!.\n");
+                return -1;
+            }
+
             return tfs_open(inode->sym_path, mode);
         }
         // Truncate (if requested).
