@@ -100,6 +100,7 @@ clean:
 
 c:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
+	rm -rf registerpipe pipe1
 
 cmac:
 	rm -f $(OBJECTS) $(TARGET_EXECS)

@@ -1,5 +1,6 @@
 #include "betterassert.h"
 #include "logging.h"
+#include "structs.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -9,17 +10,33 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static void sig_handler(int sig) {
+    if (sig == SIGINT) {
+        // In some systems, after the handler call the signal gets reverted
+        // to SIG_DFL (the default action associated with the signal).
+        // So we set the signal handler back to our function after each trap.
+        if (signal(SIGINT, sig_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
+        return; // Resume execution at point of interruption
+    }
+
+    // Must be SIGQUIT - print a message and terminate the process
+    fprintf(stderr, "Caught SIGQUIT - BOOM!\n");
+    exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char **argv) {
     (void)argc;
 
-    char register_pipe_name[256];
-    memset(register_pipe_name, '\0', 256);
+    char register_pipe_name[PIPE_NAME_SIZE];
+    memset(register_pipe_name, '\0', PIPE_NAME_SIZE);
 
-    char pipe_name[256];
-    memset(pipe_name, '\0', 256);
+    char pipe_name[PIPE_NAME_SIZE];
+    memset(pipe_name, '\0', PIPE_NAME_SIZE);
 
-    char box_name[32];
-    memset(box_name, '\0', 32);
+    char box_name[BOX_NAME_SIZE];
+    memset(box_name, '\0', BOX_NAME_SIZE);
 
     // Argument parsing of a subscriber process launch.
     strcpy(register_pipe_name, argv[1]);
@@ -36,6 +53,8 @@ int main(int argc, char **argv) {
 
     int value = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(value == 0, "Pipe could not be created.");
+
+    ALWAYS_ASSERT((signal(SIGINT, sig_handler) != SIG_ERR), "Could not catch SIGINT.");
 
     return -1;
 }

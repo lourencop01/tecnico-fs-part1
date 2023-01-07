@@ -12,21 +12,23 @@
 #include <unistd.h>
 
 void send_message(int fd) {
-    
+
     char message[MESSAGE_SIZE];
     ssize_t bytes = -1;
 
-    printf("You can now start typing your messages.\n");
+    printf("You can now start typing your messages!\n");
 
-    while (bytes != 0 && fgets(message, MESSAGE_SIZE, stdin) != NULL) {
-        bytes = write(fd, message, strlen(message));
-        ALWAYS_ASSERT(bytes == strlen(message), "Number of bytes written is not equal to"
-                                                        " the number of bytes read.");
+    while (fgets(message, MESSAGE_SIZE, stdin) != NULL) {
+        bytes = write(fd, message, strlen(message) + 1);
+        ALWAYS_ASSERT(bytes == (strlen(message) + 1), "Number of bytes written is not equal to"
+                                                      " the number of bytes read.");
     }
 
+    close(fd);
 }
 
 int main(int argc, char **argv) {
+
     (void)argc;
 
     char register_pipe_name[PIPE_NAME_SIZE];
@@ -49,6 +51,8 @@ int main(int argc, char **argv) {
 
     //Check if pipe_name is a valid path name. TODO
 
+    // Check if pipe_name already exists. TODO
+
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
 
@@ -60,15 +64,18 @@ int main(int argc, char **argv) {
     int register_fd = open(register_pipe_name, O_WRONLY);
     ALWAYS_ASSERT(register_fd != -1, "Could not open the register pipe.");
 
-    ssize_t bytes_written = write(register_fd, reg, sizeof(reg));
+    ssize_t bytes_written = write(register_fd, reg, sizeof(register_client_t));
     ALWAYS_ASSERT(bytes_written > 0, "Could not write to the register pipe.");
 
-    //Check if pipe_name already exists. TODO
+    close(register_fd);
 
     int pipe_fd = open(pipe_name, O_WRONLY);
     ALWAYS_ASSERT(pipe_fd != -1, "Could not open the publisher's pipe.");
 
     send_message(pipe_fd);
+
+    free(reg);
+    ALWAYS_ASSERT((unlink(pipe_name) == 0), "Could not delete %s.", pipe_name);
 
     return -1;
 }

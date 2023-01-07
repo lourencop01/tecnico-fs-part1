@@ -9,25 +9,51 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <pthread.h>
 
-void read_registrations(int fd) {
-    
-    register_client_t *reg = NULL;
-    ssize_t bytes = -1; 
+void* register_publisher(void *arg) {
 
-    
+    register_client_t *reg = (register_client_t*) arg;
+    ssize_t bytes = 1;
+    char read_buff[MESSAGE_SIZE];
+
+    int pipe_fd = open(reg->pipe_name, O_RDONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->pipe_name);
+
+    while(bytes > 0) {
+        bytes = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
+        printf("%s", read_buff);
+        fflush(stdin);
+    }
+
+    close(pipe_fd);
+    return NULL;
+}
+
+void read_registrations(int fd, int sessions) {
+
+    pthread_t tid[sessions];  
+    register_client_t *reg = (register_client_t*)malloc(sizeof(register_client_t));
+    ssize_t bytes = -1;
+
         bytes = read(fd, reg, sizeof(register_client_t));
         ALWAYS_ASSERT(bytes == sizeof(register_client_t), "Could not read registration form.");
-        printf("READ REG! PIPE NAME = %s\n", reg->pipe_name);
-        // Sends the register to a thread TODO
 
-    
-
+        switch (reg->code) {
+        case 1:
+            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &register_publisher, reg) == 0), 
+                                                    "Could not create register_publisher thread.");
+        default:
+            ALWAYS_ASSERT((pthread_join(tid[0], NULL) == 0),
+                          "Register_publisher thread could not join.");
+            break;
+        }
+        
 }
 
 int main(int argc, char **argv) {
+    
     (void)argc;
-
     char register_pipe_name[PIPE_NAME_SIZE];
     memset(register_pipe_name, '\0', PIPE_NAME_SIZE);
 
@@ -50,10 +76,9 @@ int main(int argc, char **argv) {
     int register_fd = open(register_pipe_name, O_RDONLY);
     ALWAYS_ASSERT(register_fd != -1, "Register pipe could not be open.");
 
-    read_registrations(register_fd);
-    
+    read_registrations(register_fd, max_sessions);
 
-
+    ALWAYS_ASSERT((unlink(register_pipe_name) == 0), "Could not remove %s.", register_pipe_name);
 
     return -1;
 }
