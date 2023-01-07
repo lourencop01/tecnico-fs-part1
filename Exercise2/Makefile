@@ -102,7 +102,6 @@ c:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
 
 cmac:
-	clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
 	rm -rf *.dSYM
 

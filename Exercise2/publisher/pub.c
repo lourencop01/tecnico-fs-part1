@@ -1,7 +1,8 @@
 #include "betterassert.h"
 #include "logging.h"
-#include "structs/structs.h"
+#include "structs.h"
 
+#include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,21 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+void send_message(int fd) {
+    
+    char message[MESSAGE_SIZE];
+    ssize_t bytes = -1;
+
+    printf("You can now start typing your messages.\n");
+
+    while (bytes != 0 && fgets(message, MESSAGE_SIZE, stdin) != NULL) {
+        bytes = write(fd, message, strlen(message));
+        ALWAYS_ASSERT(bytes == strlen(message), "Number of bytes written is not equal to"
+                                                        " the number of bytes read.");
+    }
+
+}
 
 int main(int argc, char **argv) {
     (void)argc;
@@ -33,8 +49,6 @@ int main(int argc, char **argv) {
 
     //Check if pipe_name is a valid path name. TODO
 
-    //Check if pipe_name already exists. TODO
-
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
 
@@ -49,16 +63,12 @@ int main(int argc, char **argv) {
     ssize_t bytes_written = write(register_fd, reg, sizeof(reg));
     ALWAYS_ASSERT(bytes_written > 0, "Could not write to the register pipe.");
 
+    //Check if pipe_name already exists. TODO
+
     int pipe_fd = open(pipe_name, O_WRONLY);
     ALWAYS_ASSERT(pipe_fd != -1, "Could not open the publisher's pipe.");
 
-    printf("You can now start typing your messages.\n");
-    char message[MESSAGE_SIZE];
-    while (fgets(message, MESSAGE_SIZE, stdin) != NULL) {
-        bytes_written = write(pipe_fd, message, strlen(message));
-        ALWAYS_ASSERT(bytes_written == strlen(message), "Number of bytes written is not equal to"
-                                                        " the number of bytes read.");
-    }
+    send_message(pipe_fd);
 
     return -1;
 }
