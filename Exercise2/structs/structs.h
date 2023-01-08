@@ -1,6 +1,8 @@
 #ifndef __STRUCTS_H__
 #define __STRUCTS_H__
 
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -37,11 +39,19 @@ typedef struct {
     uint64_t box_size;
     uint64_t n_publishers;
     uint64_t n_subscribers;
+
+    char tfs_file[MAX_FILE_NAME];
 } box_t;
+
+typedef struct {
+    bool taken;
+    box_t box;
+} box_status_t;
 
 typedef struct {
     uint8_t code;
     box_t boxes[MAX_BOX_NUMBER];
+    int box_amount;
 } box_listing_t;
 
 

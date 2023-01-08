@@ -82,50 +82,47 @@ int main(int argc, char **argv) {
 
         box_listing_t *reply = (box_listing_t*)malloc(sizeof(box_listing_t));
         bytes = read(pipe_fd, reply, sizeof(box_listing_t));
-        ALWAYS_ASSERT(bytes == sizeof(box_listing_t), "Manager failed to read from %s.", pipe_name);
-        
-        // NO BOX CONDITION TODO
+        //printf("bytes read = %zd, sizeof is %zd\n", bytes, sizeof(box_listing_t));
+        //ALWAYS_ASSERT(bytes == sizeof(box_listing_t), "Manager failed to read from %s.", pipe_name);
 
-        int box_number = 0;
-        int i,j;
-        box_t *temp_box = (box_t*)malloc(sizeof(box_t));
+        int box_number = reply->box_amount;
 
-        for (i = 0; i < MAX_BOX_NUMBER; i++) {
-            if (reply->boxes[i].last == 1) {
-                box_number = i + 1;
-                break;
-            }
-        }
+        if (box_number == 0) {
+            fprintf(stdout, "NO BOXES FOUND\n");
+        } else {
+            box_t *temp_box = (box_t*)malloc(sizeof(box_t));
 
-        for (i = 0; i < box_number; i++) {
-            for (j = i + 1; j < box_number; j++) {
-                if (strcmp(reply->boxes[i].box_name,reply->boxes[j].box_name) > 0) {
+            for (int i = 0; i < box_number; i++) {
+                for (int j = i + 1; j < box_number; j++) {
+                    if (strcmp(reply->boxes[i].box_name,reply->boxes[j].box_name) > 0) {
 
-                    temp_box->box_size = reply->boxes[i].box_size;
-                    temp_box->n_publishers = reply->boxes[i].n_publishers;
-                    temp_box->n_subscribers = reply->boxes[i].n_subscribers;
-                    strcpy(temp_box->box_name,reply->boxes[i].box_name);
+                        temp_box->box_size = reply->boxes[i].box_size;
+                        temp_box->n_publishers = reply->boxes[i].n_publishers;
+                        temp_box->n_subscribers = reply->boxes[i].n_subscribers;
+                        strcpy(temp_box->box_name,reply->boxes[i].box_name);
 
-                    reply->boxes[i].box_size = reply->boxes[j].box_size;
-                    reply->boxes[i].n_publishers = reply->boxes[j].n_publishers;
-                    reply->boxes[i].n_subscribers = reply->boxes[j].n_subscribers;
-                    strcpy(reply->boxes[i].box_name,reply->boxes[j].box_name);
+                        reply->boxes[i].box_size = reply->boxes[j].box_size;
+                        reply->boxes[i].n_publishers = reply->boxes[j].n_publishers;
+                        reply->boxes[i].n_subscribers = reply->boxes[j].n_subscribers;
+                        strcpy(reply->boxes[i].box_name,reply->boxes[j].box_name);
 
-                    reply->boxes[j].box_size = temp_box->box_size;
-                    reply->boxes[j].n_publishers = temp_box->n_publishers;
-                    reply->boxes[j].n_subscribers = temp_box->n_subscribers;
-                    strcpy(reply->boxes[j].box_name,temp_box->box_name);
-                
+                        reply->boxes[j].box_size = temp_box->box_size;
+                        reply->boxes[j].n_publishers = temp_box->n_publishers;
+                        reply->boxes[j].n_subscribers = temp_box->n_subscribers;
+                        strcpy(reply->boxes[j].box_name,temp_box->box_name);
+                    
+                    }
                 }
             }
-        }
 
-        free(temp_box);
-        
-        for (i = 0; i < box_number; i++) {
-            fprintf(stdout, "%s %zu %zu %zu\n", reply->boxes[i].box_name, reply->boxes[i].box_size, 
-                                    reply->boxes[i].n_publishers, reply->boxes[i].n_subscribers);
-        }
+            free(temp_box);
+
+            for (int i = 0; i < box_number; i++) {
+                fprintf(stdout, "%s %zu %zu %zu\n", reply->boxes[i].box_name, 
+                                            reply->boxes[i].box_size, reply->boxes[i].n_publishers, 
+                                                                    reply->boxes[i].n_subscribers);
+            }
+    }
     }
 
     close(pipe_fd);

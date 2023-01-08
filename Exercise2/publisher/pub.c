@@ -21,7 +21,7 @@ void send_message(int fd) {
     while (fgets(message, MESSAGE_SIZE, stdin) != NULL) {
         bytes = write(fd, message, strlen(message) + 1);
         ALWAYS_ASSERT(bytes == (strlen(message) + 1), "Number of bytes written is not equal to"
-                                                      " the number of bytes read.");
+                                                                    " the number of bytes read.");
     }
 
     close(fd);
