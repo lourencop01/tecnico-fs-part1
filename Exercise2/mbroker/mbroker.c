@@ -12,15 +12,67 @@
 #include <unistd.h>
 #include <pthread.h>
 
+void* list_boxes(void *arg) {
+    
+    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+    box_listing_t *reply = (box_listing_t*)malloc(sizeof(box_listing_t));
+
+    reply->code = 8;
+
+    int pipe_fd = open(args->name.pipe, O_WRONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", args->name.pipe);
+
+    ssize_t bytes_written = write(pipe_fd, reply, sizeof(req_reply_t));
+    ALWAYS_ASSERT(bytes_written > 0, "MBroker could not write to the %s.", args->name.pipe);
+
+    close(pipe_fd);
+
+    return NULL;
+}
+
+void* remove_box(void *arg) {
+    
+    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+    req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
+
+    reply->code = 6;
+
+    int check_err = tfs_unlink(args->name.box);
+    if (check_err == -1) {
+        
+        reply->ret = check_err;
+        strcpy(reply->err_message, "MBroker failed to remove the box.");
+
+    } else {
+
+        reply->ret = 0;
+        strcpy(reply->err_message, "\0");
+    }
+
+    int pipe_fd = open(args->name.pipe, O_WRONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", args->name.pipe);
+
+    ssize_t bytes_written = write(pipe_fd, reply, sizeof(req_reply_t));
+    ALWAYS_ASSERT(bytes_written > 0, "MBroker could not write to the %s.", args->name.pipe);
+
+    close(pipe_fd);
+
+    return NULL;
+}
+
 void* create_box(void *arg) {
     
     pipe_box_code_t *args = (pipe_box_code_t*) arg;
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
 
+    printf("enters here\n");
+
+    reply->code = 4;
+
     int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
+    printf("%d\n", box_fd);
     if (box_fd != -1) {
 
-        reply->code = 4;
         reply->ret = 0;
         strcpy(reply->err_message, "\0");
 
@@ -28,7 +80,6 @@ void* create_box(void *arg) {
 
     } else {
 
-        reply->code = 4;
         reply->ret = -1;
         strcpy(reply->err_message, "MBroker failed to create the box.");
     
@@ -80,6 +131,14 @@ void read_registrations(int fd, int sessions) {
             break;
         case 3:
             ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &create_box, args) == 0), 
+                                                    "Could not create register_publisher thread.");
+            break;
+        case 5:
+            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &remove_box, args) == 0), 
+                                                    "Could not create register_publisher thread.");
+            break;
+        case 7:
+            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &list_boxes, args) == 0), 
                                                     "Could not create register_publisher thread.");
             break;
         default:

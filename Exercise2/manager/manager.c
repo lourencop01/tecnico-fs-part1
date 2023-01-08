@@ -11,13 +11,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-/* static void print_usage() {
-    fprintf(stderr, "usage: \n"
-                    "   manager <register_pipe_name> create <box_name>\n"
-                    "   manager <register_pipe_name> remove <box_name>\n"
-                    "   manager <register_pipe_name> list\n");
-} */
-
 int main(int argc, char **argv) {
     (void)argc;
 
@@ -55,6 +48,7 @@ int main(int argc, char **argv) {
 
     } else if (!strcmp(argv[3], "list")) {
         args->code = 7;
+        strcpy(args->name.box, box_name);
 
     } else {
         fprintf(stderr, "Please insert a correct input command.\n");
@@ -72,16 +66,66 @@ int main(int argc, char **argv) {
     int pipe_fd = open(pipe_name, O_RDONLY);
     ALWAYS_ASSERT(pipe_fd != -1, "Manager could not open %s.", pipe_name);
 
-    req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
-    bytes = read(pipe_fd, reply, sizeof(req_reply_t));
-    ALWAYS_ASSERT(bytes == sizeof(req_reply_t), "Manager failed to read from %s.", pipe_name);
+    if (args->code == 3 || args->code == 5) {
 
-    if (reply->ret == 0) {
-        printf("Box successfuly created/removed!\ncode = %d, return value = %d\n", reply->code, 
-                                                                                        reply->ret);
+        req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
+        bytes = read(pipe_fd, reply, sizeof(req_reply_t));
+        ALWAYS_ASSERT(bytes == sizeof(req_reply_t), "Manager failed to read from %s.", pipe_name);
+
+        if (reply->ret == 0) {
+            fprintf(stdout, "OK\n");
+        } else {
+            fprintf(stdout, "ERROR %s\n", reply->err_message);
+        }
+
     } else {
-        printf("The box failed to be created/removed.\n code = %d, return value = %d, %s\n",
-                                                    reply->code, reply->ret, reply->err_message);
+
+        box_listing_t *reply = (box_listing_t*)malloc(sizeof(box_listing_t));
+        bytes = read(pipe_fd, reply, sizeof(box_listing_t));
+        ALWAYS_ASSERT(bytes == sizeof(box_listing_t), "Manager failed to read from %s.", pipe_name);
+        
+        // NO BOX CONDITION TODO
+
+        int box_number = 0;
+        int i,j;
+        box_t *temp_box = (box_t*)malloc(sizeof(box_t));
+
+        for (i = 0; i < MAX_BOX_NUMBER; i++) {
+            if (reply->boxes[i].last == 1) {
+                box_number = i + 1;
+                break;
+            }
+        }
+
+        for (i = 0; i < box_number; i++) {
+            for (j = i + 1; j < box_number; j++) {
+                if (strcmp(reply->boxes[i].box_name,reply->boxes[j].box_name) > 0) {
+
+                    temp_box->box_size = reply->boxes[i].box_size;
+                    temp_box->n_publishers = reply->boxes[i].n_publishers;
+                    temp_box->n_subscribers = reply->boxes[i].n_subscribers;
+                    strcpy(temp_box->box_name,reply->boxes[i].box_name);
+
+                    reply->boxes[i].box_size = reply->boxes[j].box_size;
+                    reply->boxes[i].n_publishers = reply->boxes[j].n_publishers;
+                    reply->boxes[i].n_subscribers = reply->boxes[j].n_subscribers;
+                    strcpy(reply->boxes[i].box_name,reply->boxes[j].box_name);
+
+                    reply->boxes[j].box_size = temp_box->box_size;
+                    reply->boxes[j].n_publishers = temp_box->n_publishers;
+                    reply->boxes[j].n_subscribers = temp_box->n_subscribers;
+                    strcpy(reply->boxes[j].box_name,temp_box->box_name);
+                
+                }
+            }
+        }
+
+        free(temp_box);
+        
+        for (i = 0; i < box_number; i++) {
+            fprintf(stdout, "%s %zu %zu %zu\n", reply->boxes[i].box_name, reply->boxes[i].box_size, 
+                                    reply->boxes[i].n_publishers, reply->boxes[i].n_subscribers);
+        }
     }
 
     close(pipe_fd);
