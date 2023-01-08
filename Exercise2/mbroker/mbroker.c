@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "betterassert.h"
 #include "structs.h"
+#include "operations.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -11,14 +12,47 @@
 #include <unistd.h>
 #include <pthread.h>
 
+void* create_box(void *arg) {
+    
+    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+    req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
+
+    int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
+    if (box_fd != -1) {
+
+        reply->code = 4;
+        reply->ret = 0;
+        strcpy(reply->err_message, "\0");
+
+        tfs_close(box_fd);
+
+    } else {
+
+        reply->code = 4;
+        reply->ret = -1;
+        strcpy(reply->err_message, "MBroker failed to create the box.");
+    
+    }
+
+    int pipe_fd = open(args->name.pipe, O_WRONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", args->name.pipe);
+
+    ssize_t bytes_written = write(pipe_fd, reply, sizeof(req_reply_t));
+    ALWAYS_ASSERT(bytes_written > 0, "MBroker could not write to the %s.", args->name.pipe);
+
+    close(pipe_fd);
+
+    return NULL;
+}
+
 void* register_publisher(void *arg) {
 
-    register_client_t *reg = (register_client_t*) arg;
+    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
     ssize_t bytes = 1;
     char read_buff[MESSAGE_SIZE];
 
-    int pipe_fd = open(reg->pipe_name, O_RDONLY);
-    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->pipe_name);
+    int pipe_fd = open(reg->name.pipe, O_RDONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
 
     while(bytes > 0) {
         bytes = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
@@ -33,22 +67,26 @@ void* register_publisher(void *arg) {
 void read_registrations(int fd, int sessions) {
 
     pthread_t tid[sessions];  
-    register_client_t *reg = (register_client_t*)malloc(sizeof(register_client_t));
+    pipe_box_code_t *args = (pipe_box_code_t*)malloc(sizeof(pipe_box_code_t));
     ssize_t bytes = -1;
 
-        bytes = read(fd, reg, sizeof(register_client_t));
-        ALWAYS_ASSERT(bytes == sizeof(register_client_t), "Could not read registration form.");
+        bytes = read(fd, args, sizeof(pipe_box_code_t));
+        ALWAYS_ASSERT(bytes == sizeof(pipe_box_code_t), "Could not read registration form.");
 
-        switch (reg->code) {
+        switch (args->code) {
         case 1:
-            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &register_publisher, reg) == 0), 
+            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &register_publisher, args) == 0), 
                                                     "Could not create register_publisher thread.");
+            break;
+        case 3:
+            ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &create_box, args) == 0), 
+                                                    "Could not create register_publisher thread.");
+            break;
         default:
-            ALWAYS_ASSERT((pthread_join(tid[0], NULL) == 0),
-                          "Register_publisher thread could not join.");
             break;
         }
-        
+        ALWAYS_ASSERT((pthread_join(tid[0], NULL) == 0),
+                          "Register_publisher thread could not join.");
 }
 
 int main(int argc, char **argv) {
@@ -58,6 +96,8 @@ int main(int argc, char **argv) {
     memset(register_pipe_name, '\0', PIPE_NAME_SIZE);
 
     int max_sessions = -1;
+
+    ALWAYS_ASSERT(tfs_init(NULL) == 0, "Could not initiate Tecnico file system.");
 
     // Argument parsing of a mbroker process launch.
     strcpy(register_pipe_name, argv[1]);
@@ -79,6 +119,8 @@ int main(int argc, char **argv) {
     read_registrations(register_fd, max_sessions);
 
     ALWAYS_ASSERT((unlink(register_pipe_name) == 0), "Could not remove %s.", register_pipe_name);
+
+    ALWAYS_ASSERT(tfs_destroy() == 0, "Could not destroy Tecnico file system.");
 
     return -1;
 }

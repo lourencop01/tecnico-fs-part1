@@ -10,15 +10,25 @@
 #define MESSAGE_SIZE 1024
 
 typedef struct {
-    char pipe_name[256];
-    char box_name[32];
-    char message[1024];
+    char pipe[PIPE_NAME_SIZE];
+    char box[BOX_NAME_SIZE];
+} pipe_box_t;
+
+typedef struct {
+    pipe_box_t name;
+    char message[MESSAGE_SIZE];
 } message_t;
 
 typedef struct {
-    char pipe_name[256];
-    char box_name[32];
+    pipe_box_t name;
     uint8_t code;
-} register_client_t;
+} pipe_box_code_t;
+
+typedef struct {
+    uint8_t code;
+    int32_t ret;
+    char err_message[MESSAGE_SIZE];
+} req_reply_t;
+
 
 #endif // __STRUCTS_H__

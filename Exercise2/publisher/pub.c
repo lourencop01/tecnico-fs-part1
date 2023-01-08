@@ -45,8 +45,6 @@ int main(int argc, char **argv) {
     strcpy(pipe_name, argv[2]);
     strcpy(box_name, argv[3]);
 
-    //Check if register pipe exists. TODO
-
     //Check if box_name exists. TODO
 
     //Check if pipe_name is a valid path name. TODO
@@ -56,15 +54,15 @@ int main(int argc, char **argv) {
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
 
-    register_client_t *reg = (register_client_t*)malloc(sizeof(register_client_t));
-    strcpy(reg->box_name, box_name);
-    strcpy(reg->pipe_name, pipe_name);
+    pipe_box_code_t *reg = (pipe_box_code_t*)malloc(sizeof(pipe_box_code_t));
+    strcpy(reg->name.box, box_name);
+    strcpy(reg->name.pipe, pipe_name);
     reg->code = 1;
 
     int register_fd = open(register_pipe_name, O_WRONLY);
     ALWAYS_ASSERT(register_fd != -1, "Could not open the register pipe.");
 
-    ssize_t bytes_written = write(register_fd, reg, sizeof(register_client_t));
+    ssize_t bytes_written = write(register_fd, reg, sizeof(pipe_box_code_t));
     ALWAYS_ASSERT(bytes_written > 0, "Could not write to the register pipe.");
 
     close(register_fd);

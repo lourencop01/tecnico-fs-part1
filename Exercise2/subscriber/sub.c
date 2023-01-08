@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "structs.h"
 
+#include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,8 +43,6 @@ int main(int argc, char **argv) {
     strcpy(register_pipe_name, argv[1]);
     strcpy(pipe_name, argv[2]);
     strcpy(box_name, argv[3]);
-
-    // Check if register pipe exists. TODO
 
     // Check if box_name exists. TODO
 
