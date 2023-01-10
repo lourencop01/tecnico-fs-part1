@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         // Reads the reply.
         bytes = read(pipe_fd, reply, sizeof(req_reply_t));
         ALWAYS_ASSERT(bytes == sizeof(req_reply_t), "Manager failed to read from %s.", pipe_name);
-
+    
         // Checks if the box was created/removed successfully.
         if (reply->ret == 0) {
             fprintf(stdout, "OK\n");

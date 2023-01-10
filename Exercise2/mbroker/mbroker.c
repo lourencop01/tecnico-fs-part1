@@ -11,10 +11,28 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 
 int active_sessions = 0;
 
 box_status_t boxes[MAX_BOX_NUMBER];
+
+static void sig_handler(int sig) {
+    if (sig == SIGINT) {
+        // In some systems, after the handler call the signal gets reverted
+        // to SIG_DFL (the default action associated with the signal).
+        // So we set the signal handler back to our function after each trap.
+        if (signal(SIGINT, sig_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
+        fprintf(stderr, "Caught SIGINT\n");
+        return; // Resume execution at point of interruption
+    }
+
+    // Must be SIGQUIT - print a message and terminate the process
+    fprintf(stderr, "Caught SIGQUIT - BOOM!\n");
+    return;
+}
 
 void* list_boxes(void *arg) {
 
@@ -93,31 +111,43 @@ void* create_box(void *arg) {
 
     reply->code = 4;
 
-    int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
-
-    if (box_fd != -1) {
-
-        for (int i = 0; i < MAX_BOX_NUMBER; i++) {
-            if (!boxes[i].taken) {
-                boxes[i].taken = true;
-                strcpy(boxes[i].box.box_name, args->name.box);
-                strcpy(boxes[i].box.tfs_file, args->name.box);
-                boxes[i].box.n_publishers = 0;
-                boxes[i].box.n_subscribers = 0;
-                break;
-            }
+    bool found = false;
+    for (int i = 0; i < MAX_BOX_NUMBER; i++) {
+        if (!strcmp(boxes[i].box.box_name, args->name.box) && boxes[i].taken) {                
+            found = true;
+            reply->ret = -1;
+            strcpy(reply->err_message, "Box already exists.");
+            break;
         }
+    }
 
-        reply->ret = 0;
-        strcpy(reply->err_message, "\0");
+    if (!found) {
+        int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
 
-        tfs_close(box_fd);
+        if (box_fd != -1) {
 
-    } else {
+            for (int i = 0; i < MAX_BOX_NUMBER; i++) {
+                if (!boxes[i].taken) {
+                    boxes[i].taken = true;
+                    strcpy(boxes[i].box.box_name, args->name.box);
+                    strcpy(boxes[i].box.tfs_file, args->name.box);
+                    boxes[i].box.n_publishers = 0;
+                    boxes[i].box.n_subscribers = 0;
+                    break;
+                }
+            }
 
-        reply->ret = -1;
-        strcpy(reply->err_message, "MBroker failed to create the box.");
-    
+            reply->ret = 0;
+            strcpy(reply->err_message, "\0");
+
+            tfs_close(box_fd);
+
+        } else {
+
+            reply->ret = -1;
+            strcpy(reply->err_message, "MBroker failed to create the box.");
+        
+        }
     }
 
     int pipe_fd = open(args->name.pipe, O_WRONLY);
@@ -135,15 +165,24 @@ void* register_publisher(void *arg) {
 
     active_sessions ++;
 
-    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
-    ssize_t bytes_read = 1;
-    ssize_t bytes_written = 1;
+    int box_index = -1;
 
-    char read_buff[MESSAGE_SIZE];
+    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
+
+    for (box_index = 0; box_index < MAX_BOX_NUMBER; box_index++) {
+        if (!strcmp(reg->name.box, boxes[box_index].box.box_name) && boxes[box_index].taken) {
+            if (boxes[box_index].box.n_publishers == 0) {
+                boxes[box_index].box.n_publishers++;
+            } else {
+                fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
+                return NULL;
+            }
+            break;
+        }
+    }
 
     int pipe_fd = open(reg->name.pipe, O_RDONLY);
     ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
-
     
     int file_fd = tfs_open(reg->name.box, TFS_O_APPEND);
     if (file_fd == -1) {
@@ -151,29 +190,44 @@ void* register_publisher(void *arg) {
         return NULL;
     }
 
+    char read_buff[MESSAGE_SIZE];
+    ssize_t bytes_read = 1;
+    ssize_t bytes_written = 1;
+
     while(bytes_read > 0) {
         bytes_read = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
+        printf("Wrote %s\n bytes = %zu", read_buff, bytes_written);
         if (bytes_read != bytes_written) {
             fprintf(stderr, "Bytes written did not match with bytes read!\n");
             return NULL;
         }
     }
 
-    close(file_fd);
+    tfs_close(file_fd);
+
+    // TODO DELETE THIS IS JUST TO TEST
+    ssize_t bytessss = 1;
+    int new_fd = tfs_open(reg->name.box, 0);
+    
+    while(bytessss > 0) {
+        printf("TA A LER DO FICHEIRO\n");
+        bytessss = tfs_read(new_fd, read_buff, MESSAGE_SIZE - 1);
+        printf("LIDO: %s\n", read_buff);
+    }
+    tfs_close(new_fd);
+
+    
     close(pipe_fd);
+
+    boxes[box_index].box.n_publishers--;
+
     return NULL;
 }
 
 void read_registrations(const char *register_pipe_name, int max_sessions) {
 
     pthread_t tid[max_sessions];
-
-    /* int threads[max_sessions][2];
-    for (int i = 0; i < max_sessions; i++) {
-        threads[i][0] = i;
-        threads[i][1] = 0;
-    } */
 
     while (true) {
 
@@ -186,28 +240,23 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
         bytes = read(register_fd, args, sizeof(pipe_box_code_t));
         ALWAYS_ASSERT(bytes == sizeof(pipe_box_code_t), "Could not read registration form.");
 
-        /* for (int i = 0; i < max_sessions; i++) {
-            if (threads[i][1] == 0) {
-                
-            }
-        } */
         if (active_sessions < max_sessions) {
 
             switch (args->code) {
             case 1:
-                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &register_publisher, args) == 0), 
+                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, register_publisher, args) == 0), 
                                                     "Could not create register_publisher thread.");
                 break;
             case 3:
-                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &create_box, args) == 0), 
+                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, create_box, args) == 0), 
                                                     "Could not create register_publisher thread.");
                 break;
             case 5:
-                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &remove_box, args) == 0), 
+                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, remove_box, args) == 0), 
                                                     "Could not create register_publisher thread.");
                 break;
             case 7:
-                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, &list_boxes, args) == 0), 
+                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, list_boxes, args) == 0), 
                                                     "Could not create register_publisher thread.");
                 break;
             default:
@@ -255,9 +304,15 @@ int main(int argc, char **argv) {
 
     read_registrations(register_pipe_name, max_sessions);
 
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+    exit(EXIT_FAILURE);
+    }
+
+    //ALWAYS_ASSERT((signal(SIGINT, sig_handler) != SIG_ERR), "Could not catch SIGINT.");
+
     ALWAYS_ASSERT((unlink(register_pipe_name) == 0), "Could not remove %s.", register_pipe_name);
 
-    ALWAYS_ASSERT(tfs_destroy() == 0, "Could not destroy Tecnico file system.");
+    ALWAYS_ASSERT(tfs_destroy() == 0, "Could not destroy Tecnico file system.");    
 
     return -1;
 }

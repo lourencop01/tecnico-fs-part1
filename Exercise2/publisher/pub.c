@@ -30,7 +30,10 @@ void send_message(int fd) {
 
     // While loop to read the messages from stdin until CTRL+D (EOF) is pressed.
     while (fgets(message, MESSAGE_SIZE, stdin) != NULL) {
+        //remove the '\n' character from the message
+        message[strlen(message) - 1] = '\0';
         bytes = write(fd, message, strlen(message) + 1);
+        printf("Message sent has %zu bytes\n", bytes);
         ALWAYS_ASSERT(bytes == (strlen(message) + 1), "Number of bytes written is not equal to"
                                                                     " the number of bytes read.");
     }
