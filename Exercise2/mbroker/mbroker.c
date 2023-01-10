@@ -25,13 +25,42 @@ static void sig_handler(int sig) {
         if (signal(SIGINT, sig_handler) == SIG_ERR) {
             exit(EXIT_FAILURE);
         }
+
+        ALWAYS_ASSERT(tfs_destroy() == 0,
+                      "Could not destroy Tecnico file system.");
+
         fprintf(stderr, "Caught SIGINT\n");
-        return; // Resume execution at point of interruption
+        exit(EXIT_SUCCESS);
+
     }
 
     // Must be SIGQUIT - print a message and terminate the process
     fprintf(stderr, "Caught SIGQUIT - BOOM!\n");
-    return;
+    exit(EXIT_SUCCESS);
+}
+
+int find_box(const char *name) {
+
+    // Looks for a box that corresponds to "name" in boxes and returns its index.
+    for (int i = 0; i < MAX_BOX_NUMBER; i++) {
+        if (boxes[i].taken && !strcmp(boxes[i].box.box_name, name)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+int empty_spot() {
+
+    //Finds an empty spot in boxes.
+    for (int i = 0; i < MAX_BOX_NUMBER; i++) {
+        if (!boxes[i].taken) {
+            return i;
+        }
+    }
+    return -1;
+
 }
 
 void* list_boxes(void *arg) {
@@ -67,7 +96,7 @@ void* list_boxes(void *arg) {
 void* remove_box(void *arg) {
 
     active_sessions ++;
-    
+
     pipe_box_code_t *args = (pipe_box_code_t*) arg;
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
 
@@ -75,18 +104,15 @@ void* remove_box(void *arg) {
 
     int check_err = tfs_unlink(args->name.box);
     if (check_err == -1) {
-        
+
         reply->ret = check_err;
         strcpy(reply->err_message, "MBroker failed to remove the box.");
 
     } else {
 
-        for (int i = 0; i < MAX_BOX_NUMBER; i++) {
-            if (!strcmp(boxes[i].box.box_name, args->name.box) && boxes[i].taken) {
-                boxes[i].taken = false;
-            }
-        }
-        
+        int box_index = find_box(args->name.box);
+        boxes[box_index].taken = false;
+
         reply->ret = 0;
         strcpy(reply->err_message, "\0");
     }
@@ -111,43 +137,36 @@ void* create_box(void *arg) {
 
     reply->code = 4;
 
-    bool found = false;
-    for (int i = 0; i < MAX_BOX_NUMBER; i++) {
-        if (!strcmp(boxes[i].box.box_name, args->name.box) && boxes[i].taken) {                
-            found = true;
-            reply->ret = -1;
-            strcpy(reply->err_message, "Box already exists.");
-            break;
-        }
-    }
+    int spot = empty_spot();
 
-    if (!found) {
+    if (find_box(args->name.box) != -1) {
+
+        reply->ret = -1;
+        strcpy(reply->err_message, "Box already exists.");
+
+    } else if (spot != -1) {
+
         int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
 
         if (box_fd != -1) {
 
-            for (int i = 0; i < MAX_BOX_NUMBER; i++) {
-                if (!boxes[i].taken) {
-                    boxes[i].taken = true;
-                    strcpy(boxes[i].box.box_name, args->name.box);
-                    strcpy(boxes[i].box.tfs_file, args->name.box);
-                    boxes[i].box.n_publishers = 0;
-                    boxes[i].box.n_subscribers = 0;
-                    break;
-                }
-            }
+            boxes[spot].taken = true;
+            strcpy(boxes[spot].box.box_name, args->name.box);
+            strcpy(boxes[spot].box.tfs_file, args->name.box);
+            boxes[spot].box.n_publishers = 0;
+            boxes[spot].box.n_subscribers = 0;
 
             reply->ret = 0;
             strcpy(reply->err_message, "\0");
 
             tfs_close(box_fd);
-
-        } else {
-
-            reply->ret = -1;
-            strcpy(reply->err_message, "MBroker failed to create the box.");
-        
         }
+
+    } else {
+
+        reply->ret = -1;
+        strcpy(reply->err_message, "Maximum box capacity reached.");
+
     }
 
     int pipe_fd = open(args->name.pipe, O_WRONLY);
@@ -161,29 +180,76 @@ void* create_box(void *arg) {
     return NULL;
 }
 
+void* register_subscriber(void *arg) {
+
+    active_sessions ++;
+
+    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
+
+    //Finds the box to subscribe and increases its subscribers.
+    int box_index = find_box(reg->name.box);
+
+    if (box_index != -1) {
+        boxes[box_index].box.n_subscribers++;
+    } else {
+        fprintf(stderr, "%s does not exist.\n", reg->name.box);
+        return NULL;
+    }
+
+    int pipe_fd = open(reg->name.pipe, O_WRONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
+
+    int file_fd = tfs_open(reg->name.box, 0);
+    if (file_fd == -1) {
+        fprintf(stderr, "MBroker could not open the box for writing.\n");
+        return NULL;
+    }
+
+    //Reads the messages in the box and sends the messages to the subscriber.
+    char buffer[MESSAGE_SIZE];
+    memset(buffer, '\0', MESSAGE_SIZE);
+
+    ssize_t bytes_wrote = -1;
+
+    ssize_t bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
+    while (bytes_read > 0) {
+        bytes_wrote = write(pipe_fd, buffer, (size_t)bytes_read);
+        printf("message is: %s", buffer);
+        bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
+        ALWAYS_ASSERT(bytes_wrote == bytes_read, "An error occured sending the message to "
+                                                                                "the subscriber.");
+    }
+    
+    tfs_close(file_fd);
+    close(pipe_fd);
+
+    boxes[box_index].box.n_subscribers--;
+
+    return NULL;
+}
+
 void* register_publisher(void *arg) {
 
     active_sessions ++;
 
-    int box_index = -1;
-
     pipe_box_code_t *reg = (pipe_box_code_t*) arg;
 
-    for (box_index = 0; box_index < MAX_BOX_NUMBER; box_index++) {
-        if (!strcmp(reg->name.box, boxes[box_index].box.box_name) && boxes[box_index].taken) {
-            if (boxes[box_index].box.n_publishers == 0) {
-                boxes[box_index].box.n_publishers++;
-            } else {
-                fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
-                return NULL;
-            }
-            break;
-        }
+    int box_index = find_box(reg->name.box);
+
+    if (box_index == -1) {
+        fprintf(stderr, "%s does not exist.\n", reg->name.box);
+        return NULL;
+    }
+    else if (boxes[box_index].box.n_publishers == 0) {
+        boxes[box_index].box.n_publishers++;
+    } else {
+        fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
+        return NULL;
     }
 
     int pipe_fd = open(reg->name.pipe, O_RDONLY);
     ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
-    
+
     int file_fd = tfs_open(reg->name.box, TFS_O_APPEND);
     if (file_fd == -1) {
         fprintf(stderr, "MBroker could not open the box for writing.\n");
@@ -195,33 +261,25 @@ void* register_publisher(void *arg) {
     ssize_t bytes_written = 1;
 
     while(bytes_read > 0) {
+
         bytes_read = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
+        read_buff[strlen(read_buff)] = '\n';
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
-        printf("Wrote %s\n bytes = %zu", read_buff, bytes_written);
+
         if (bytes_read != bytes_written) {
+
             fprintf(stderr, "Bytes written did not match with bytes read!\n");
             return NULL;
+
         }
     }
 
     tfs_close(file_fd);
 
-    // TODO DELETE THIS IS JUST TO TEST
-    ssize_t bytessss = 1;
-    int new_fd = tfs_open(reg->name.box, 0);
-    
-    while(bytessss > 0) {
-        printf("TA A LER DO FICHEIRO\n");
-        bytessss = tfs_read(new_fd, read_buff, MESSAGE_SIZE - 1);
-        printf("LIDO: %s\n", read_buff);
-    }
-    tfs_close(new_fd);
-
-    
     close(pipe_fd);
 
     boxes[box_index].box.n_publishers--;
-
+ 
     return NULL;
 }
 
@@ -247,17 +305,21 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
                 ALWAYS_ASSERT((pthread_create(&tid[0], NULL, register_publisher, args) == 0), 
                                                     "Could not create register_publisher thread.");
                 break;
+            case 2:
+                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, register_subscriber, args) == 0),
+                                                    "Could not create register_subscriber thread.");
+                break;
             case 3:
                 ALWAYS_ASSERT((pthread_create(&tid[0], NULL, create_box, args) == 0), 
-                                                    "Could not create register_publisher thread.");
+                                                            "Could not create create_box thread.");
                 break;
             case 5:
                 ALWAYS_ASSERT((pthread_create(&tid[0], NULL, remove_box, args) == 0), 
-                                                    "Could not create register_publisher thread.");
+                                                            "Could not create remove_box thread.");
                 break;
             case 7:
                 ALWAYS_ASSERT((pthread_create(&tid[0], NULL, list_boxes, args) == 0), 
-                                                    "Could not create register_publisher thread.");
+                                                            "Could not create list_boxes thread.");
                 break;
             default:
                 break;
@@ -275,9 +337,14 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
 }
 
 int main(int argc, char **argv) {
-    
+
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        exit(EXIT_FAILURE);
+    }
+
     ALWAYS_ASSERT(argc == 3, "Mbroker has not received the correct amount of arguments.\n"
                                                                             "Please try again.");
+    
     char register_pipe_name[PIPE_NAME_SIZE];
     memset(register_pipe_name, '\0', PIPE_NAME_SIZE);
 
@@ -298,21 +365,13 @@ int main(int argc, char **argv) {
 
     //Checking if register pipe already exists TODO ver lab pipes
 
+    unlink(register_pipe_name);
+
     //Creates the register pipe.
     int check_err = mkfifo(register_pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Register pipe could not be created.");
 
-    read_registrations(register_pipe_name, max_sessions);
-
-    if (signal(SIGINT, sig_handler) == SIG_ERR) {
-    exit(EXIT_FAILURE);
-    }
-
-    //ALWAYS_ASSERT((signal(SIGINT, sig_handler) != SIG_ERR), "Could not catch SIGINT.");
-
-    ALWAYS_ASSERT((unlink(register_pipe_name) == 0), "Could not remove %s.", register_pipe_name);
-
-    ALWAYS_ASSERT(tfs_destroy() == 0, "Could not destroy Tecnico file system.");    
+    read_registrations(register_pipe_name, max_sessions); 
 
     return -1;
 }
