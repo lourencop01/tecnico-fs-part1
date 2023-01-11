@@ -65,14 +65,11 @@ int main(int argc, char **argv) {
     //Check if box_name exists nd is valid. TODO
     ALWAYS_ASSERT(strlen(box_name) < BOX_NAME_SIZE, "Box name is too long. Please try again");
 
-    //Check if box_name already exists in tfs. TODO CHECK IF THIS WORKS
-    ALWAYS_ASSERT(access(box_name, F_OK) == -1, "Box does not exist. Try a different name.");
+    // Unlinks the pipe if it exists.
+    unlink(pipe_name);
 
     //Check if pipe_name is a valid path name. TODO
     ALWAYS_ASSERT(strlen(pipe_name) < PIPE_NAME_SIZE, "Pipe name is too long. Please try again");
-
-    // Check if pipe_name already exists. TODO
-    ALWAYS_ASSERT(access(pipe_name, F_OK) == -1, "Pipe already exists. Try a different name.");
 
     // Create the client pipe.
     int check_err = mkfifo(pipe_name, 0640);

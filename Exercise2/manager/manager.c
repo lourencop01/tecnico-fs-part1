@@ -30,6 +30,12 @@ int main(int argc, char **argv) {
     strcpy(register_pipe_name, argv[1]);
     strcpy(pipe_name, argv[2]);
 
+    // Check if pipe_name is a valid path name. TODO
+    ALWAYS_ASSERT((strlen(pipe_name) < PIPE_NAME_SIZE), "Pipe name is too long, please try again.");
+
+    // Unlinks the pipe if it exists.
+    unlink(pipe_name);
+
     // Create a manager registration form.
     pipe_box_code_t *reg = (pipe_box_code_t*)malloc(sizeof(pipe_box_code_t));
     strcpy(reg->name.pipe, pipe_name);
@@ -37,9 +43,6 @@ int main(int argc, char **argv) {
     // Create a pipe for the manager to communicate with the MBroker.
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
-
-    // Check if pipe_name is a valid path name. TODO
-    ALWAYS_ASSERT((strlen(pipe_name) < PIPE_NAME_SIZE), "Pipe name is too long, please try again.");
 
     // Checks if the user wants the manager to list the boxes, or to create/remove a box.
     // Parses the remaining arguments accordingly.
@@ -142,8 +145,7 @@ int main(int argc, char **argv) {
 
             // Prints the box list.
             for (int i = 0; i < box_number; i++) {
-                //TODO mudar os %
-                fprintf(stdout, "%s %llu %llu %llu\n", reply->boxes[i].box_name, 
+                fprintf(stdout, "%s %zd %zd %zd\n", reply->boxes[i].box_name, 
                                             reply->boxes[i].box_size, reply->boxes[i].n_publishers, 
                                                                     reply->boxes[i].n_subscribers);
             }

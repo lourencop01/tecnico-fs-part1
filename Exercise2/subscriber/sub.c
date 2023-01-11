@@ -59,9 +59,6 @@ int main(int argc, char **argv) {
     // Check if pipe_name is a valid path name. TODO
     ALWAYS_ASSERT(strlen(pipe_name) < PIPE_NAME_SIZE, "Pipe name is too long.");
 
-    // Check if pipe_name already exists. TODO
-    ALWAYS_ASSERT(access(pipe_name, F_OK) == -1, "Pipe %s already exists.", pipe_name);
-
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
 
@@ -85,15 +82,20 @@ int main(int argc, char **argv) {
 
     // Open the pipe for reading and read.
     int pipe_fd = open(pipe_name, O_RDONLY);
+    printf("opens pipe for reading\n");
     ALWAYS_ASSERT(pipe_fd != -1, "Could not open the pipe.");
 
     ssize_t bytes_read = 0;
+    char message[MESSAGE_SIZE];
+    memset(message, '\0', MESSAGE_SIZE);
     while(true) {
 
-        bytes_read = read(pipe_fd, stdout, sizeof(pipe_box_code_t));
-        printf("Bytes read: %ld\n", bytes_read);
+        bytes_read = read(pipe_fd, message, MESSAGE_SIZE);
+        printf("message: %s (%zu bytes)\n", message, bytes_read);
 
     }
 
+    // Close the pipe.
+    ALWAYS_ASSERT(close(pipe_fd) == 0, "Could not close the pipe.");
     return -1;
 }
