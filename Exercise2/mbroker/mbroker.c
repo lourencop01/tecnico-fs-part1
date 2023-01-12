@@ -39,7 +39,15 @@ static void sig_handler(int sig) {
         }
 
         ALWAYS_ASSERT(tfs_destroy() == 0,
-                      "Could not destroy Tecnico file system.");
+                        "Could not destroy Tecnico file system.");
+        ALWAYS_ASSERT(pthread_cond_destroy(&pub_sub_cond) == 0,
+                        "Could not destroy pub_sub_cond.");
+        ALWAYS_ASSERT(pthread_mutex_destroy(&pub_sub_mutex) == 0,
+                        "Could not destroy pub_sub_mutex.");
+        ALWAYS_ASSERT(pthread_mutex_destroy(&boxes_mutex) == 0, 
+                        "Could not destroy boxes_mutex.");
+        ALWAYS_ASSERT(pthread_mutex_destroy(&sessions) == 0, 
+                        "Could not destroy sessions mutex.");
 
         exit(EXIT_SUCCESS);
 
@@ -328,9 +336,9 @@ void* register_subscriber(void *arg) {
             printf("sub got signalled.\n");
             bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
         }
-
+        
         bytes_written = write(pipe_fd, buffer, (size_t)bytes_read);
-
+        printf("sub nao faz wait e escreve.\n");
         if( bytes_written != bytes_read) {
 
             fprintf(stderr, "An error occured sending the message to the subscriber.\n");
@@ -353,6 +361,7 @@ void* register_subscriber(void *arg) {
         
     }
     pthread_mutex_unlock(&pub_sub_mutex);
+    printf("sub unlocks mutex\n");
 
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
@@ -478,6 +487,7 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
 
     while (true) {
 
+        sleep(2);
         printf("ABRE PARA READ\n");
         int register_fd = open(register_pipe_name, O_RDONLY);
         ALWAYS_ASSERT(register_fd != -1, "Register pipe could not be open.");

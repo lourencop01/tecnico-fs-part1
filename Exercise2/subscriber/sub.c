@@ -100,11 +100,12 @@ int main(int argc, char **argv) {
     // Read messages from the pipe.
     ssize_t bytes_read = 0;
     char message[MESSAGE_SIZE];
-    memset(message, '\0', MESSAGE_SIZE);
+
     while(true) {
 
+        memset(message, '\0', MESSAGE_SIZE);
         bytes_read = read(pipe_fd, message, MESSAGE_SIZE);
-        printf("message: %s (%zu bytes)\n", message, bytes_read);
+        printf("message: %s(%zu bytes)\n", message, bytes_read);
 
     }
 
