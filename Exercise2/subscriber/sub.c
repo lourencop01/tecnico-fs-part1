@@ -10,7 +10,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 
+/**
+ * Signal handler function.
+ */
  static void sig_handler(int sig) {
     if (sig == SIGINT) {
         // In some systems, after the handler call the signal gets reverted
@@ -30,6 +34,7 @@
 
 int main(int argc, char **argv) {
 
+    // Set the signal handler for SIGINT.
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
         exit(EXIT_FAILURE);
     }
@@ -37,6 +42,7 @@ int main(int argc, char **argv) {
     //Check if the number of arguments is correct.
     ALWAYS_ASSERT(argc == 4, "Wrong number of arguments.");
 
+    // Creates variables for later parsing of the command line arguments.
     char register_pipe_name[PIPE_NAME_SIZE];
     memset(register_pipe_name, '\0', PIPE_NAME_SIZE);
 
@@ -51,14 +57,20 @@ int main(int argc, char **argv) {
     strcpy(pipe_name, argv[2]);
     strcpy(box_name, argv[3]);
 
-    unlink(pipe_name);
+    // Remove pipe if it does not exist.
+    if (unlink(pipe_name) != 0 && errno != ENOENT) {
+        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", pipe_name,
+                strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-    // Check if box_name is a valid box name
+    // Check if box_name is a valid box name.
     ALWAYS_ASSERT(strlen(box_name) < BOX_NAME_SIZE, "Box name is too long.");
 
-    // Check if pipe_name is a valid path name. TODO
+    // Check if pipe_name is a valid path name.
     ALWAYS_ASSERT(strlen(pipe_name) < PIPE_NAME_SIZE, "Pipe name is too long.");
 
+    // Create the subscriber's pipe
     int check_err = mkfifo(pipe_name, 0640);
     ALWAYS_ASSERT(check_err == 0, "Pipe could not be created.");
 
@@ -75,6 +87,7 @@ int main(int argc, char **argv) {
     ssize_t bytes_written = write(register_fd, reg, sizeof(pipe_box_code_t));
     ALWAYS_ASSERT(bytes_written > 0, "Could not write to the register pipe.");
 
+    // Free the registration form.
     free(reg);
 
     // Close the register pipe.
@@ -82,9 +95,9 @@ int main(int argc, char **argv) {
 
     // Open the pipe for reading and read.
     int pipe_fd = open(pipe_name, O_RDONLY);
-    printf("opens pipe for reading\n");
     ALWAYS_ASSERT(pipe_fd != -1, "Could not open the pipe.");
 
+    // Read messages from the pipe.
     ssize_t bytes_read = 0;
     char message[MESSAGE_SIZE];
     memset(message, '\0', MESSAGE_SIZE);
@@ -95,7 +108,8 @@ int main(int argc, char **argv) {
 
     }
 
-    // Close the pipe.
+    // Close and delete the subscriber's pipe.
     ALWAYS_ASSERT(close(pipe_fd) == 0, "Could not close the pipe.");
+    ALWAYS_ASSERT(unlink(pipe_name) == 0, "Could not delete the pipe.");
     return -1;
 }

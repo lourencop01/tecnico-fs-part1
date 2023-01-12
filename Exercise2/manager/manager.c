@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 
 int main(int argc, char **argv) {
     
@@ -33,8 +34,12 @@ int main(int argc, char **argv) {
     // Check if pipe_name is a valid path name. TODO
     ALWAYS_ASSERT((strlen(pipe_name) < PIPE_NAME_SIZE), "Pipe name is too long, please try again.");
 
-    // Unlinks the pipe if it exists.
-    unlink(pipe_name);
+    // Remove pipe if it does not exist
+    if (unlink(pipe_name) != 0 && errno != ENOENT) {
+        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", pipe_name,
+                strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     // Create a manager registration form.
     pipe_box_code_t *reg = (pipe_box_code_t*)malloc(sizeof(pipe_box_code_t));
