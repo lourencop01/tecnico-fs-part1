@@ -322,7 +322,7 @@ void* register_subscriber(void *arg) {
         bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
 
         // If read 0 bytes, must wait for a publisher to write, then reads again.
-        if (bytes_read == 0) {
+        while (bytes_read == 0) {
             printf("sub waits\n");
             pthread_cond_wait(&pub_sub_cond, &pub_sub_mutex);
             printf("sub got signalled.\n");
@@ -426,9 +426,9 @@ void* register_publisher(void *arg) {
 
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
         // If writes to the box, signals the subscribers that they can read.
-        if (bytes_written > 0) {
-            printf("pub signals\n");
-            pthread_cond_signal(&pub_sub_cond);
+        if (bytes_written > 0 && boxes[box_index].box.n_subscribers > 0) {
+            printf("publisher broadcasts.\n");
+            pthread_cond_broadcast(&pub_sub_cond);
         }
 
         if (bytes_read != bytes_written) {
@@ -515,11 +515,6 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
                 fprintf(stderr, "Invalid code received.\n");
                 break;
             }
-            pthread_join(tid[0], NULL);
-            pthread_join(tid[1], NULL);
-            pthread_join(tid[2], NULL);
-            pthread_join(tid[3], NULL);
-            pthread_join(tid[4], NULL);
 
         pthread_mutex_lock(&sessions);
         active_sessions --;
