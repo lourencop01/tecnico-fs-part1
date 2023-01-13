@@ -149,8 +149,8 @@ int main(int argc, char **argv) {
             free(temp_box);
 
             // Prints the box list.
-            for (int i = 0; i < box_number; i++) {
-                fprintf(stdout, "%s %llu %llu %llu\n", reply->boxes[i].box_name, 
+             for (int i = 0; i < box_number; i++) {
+                fprintf(stdout, "%s %zu %zu %zu\n", reply->boxes[i].box_name, 
                                             reply->boxes[i].box_size, reply->boxes[i].n_publishers, 
                                                                     reply->boxes[i].n_subscribers);
             }

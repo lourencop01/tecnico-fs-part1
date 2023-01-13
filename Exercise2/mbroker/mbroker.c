@@ -2,6 +2,7 @@
 #include "betterassert.h"
 #include "structs.h"
 #include "operations.h"
+#include "producer-consumer.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -16,7 +17,8 @@
 #include <errno.h> 
 
 pthread_cond_t pub_sub_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t pub_sub_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t pub_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sub_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t boxes_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sessions = PTHREAD_MUTEX_INITIALIZER;
 
@@ -42,7 +44,9 @@ static void sig_handler(int sig) {
                         "Could not destroy Tecnico file system.");
         ALWAYS_ASSERT(pthread_cond_destroy(&pub_sub_cond) == 0,
                         "Could not destroy pub_sub_cond.");
-        ALWAYS_ASSERT(pthread_mutex_destroy(&pub_sub_mutex) == 0,
+        ALWAYS_ASSERT(pthread_mutex_destroy(&pub_mutex) == 0,
+                        "Could not destroy pub_sub_mutex.");
+        ALWAYS_ASSERT(pthread_mutex_destroy(&sub_mutex) == 0,
                         "Could not destroy pub_sub_mutex.");
         ALWAYS_ASSERT(pthread_mutex_destroy(&boxes_mutex) == 0, 
                         "Could not destroy boxes_mutex.");
@@ -323,27 +327,27 @@ void* register_subscriber(void *arg) {
     ssize_t bytes_read = 1;
 
     // Reads the messages in the box and sends the messages to the subscriber.
-    pthread_mutex_lock(&pub_sub_mutex);
-    printf("sub locks mutex\n");
+    pthread_mutex_lock(&sub_mutex);
     while (bytes_read > 0) {
         
         bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
 
         // If read 0 bytes, must wait for a publisher to write, then reads again.
         while (bytes_read == 0) {
-            printf("sub waits\n");
-            pthread_cond_wait(&pub_sub_cond, &pub_sub_mutex);
-            printf("sub got signalled.\n");
+
+            pthread_cond_wait(&pub_sub_cond, &sub_mutex);
+
             bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
+            
         }
         
         bytes_written = write(pipe_fd, buffer, (size_t)bytes_read);
-        printf("sub nao faz wait e escreve.\n");
-        if( bytes_written != bytes_read) {
+
+        if( bytes_written != bytes_read || bytes_written == -1) {
 
             fprintf(stderr, "An error occured sending the message to the subscriber.\n");
             
-            pthread_mutex_unlock(&pub_sub_mutex);
+            pthread_mutex_unlock(&sub_mutex);
             
             // Closes the box and the pipe.
             ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
@@ -360,8 +364,7 @@ void* register_subscriber(void *arg) {
         }
         
     }
-    pthread_mutex_unlock(&pub_sub_mutex);
-    printf("sub unlocks mutex\n");
+    pthread_mutex_unlock(&sub_mutex);
 
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
@@ -425,8 +428,7 @@ void* register_publisher(void *arg) {
     ssize_t bytes_written = 1;
 
     // Reads the messages from the pipe and writes them to the box.
-    pthread_mutex_lock(&pub_sub_mutex);
-    printf("pub locks mutex\n");
+    pthread_mutex_lock(&pub_mutex);
     while(bytes_read > 0) {
 
         bytes_read = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
@@ -436,14 +438,13 @@ void* register_publisher(void *arg) {
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
         // If writes to the box, signals the subscribers that they can read.
         if (bytes_written > 0 && boxes[box_index].box.n_subscribers > 0) {
-            printf("publisher broadcasts.\n");
             pthread_cond_broadcast(&pub_sub_cond);
         }
 
         if (bytes_read != bytes_written) {
             
             fprintf(stderr, "Bytes written did not match with bytes read!\n");
-            pthread_mutex_unlock(&pub_sub_mutex);
+            pthread_mutex_unlock(&pub_mutex);
 
             // Closes the box and the pipe.
             ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
@@ -460,8 +461,7 @@ void* register_publisher(void *arg) {
 
     }
 
-    pthread_mutex_unlock(&pub_sub_mutex);
-    printf("pub unlocked mutex\n");
+    pthread_mutex_unlock(&pub_mutex);
 
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
@@ -487,8 +487,6 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
 
     while (true) {
 
-        sleep(2);
-        printf("ABRE PARA READ\n");
         int register_fd = open(register_pipe_name, O_RDONLY);
         ALWAYS_ASSERT(register_fd != -1, "Register pipe could not be open.");
 
@@ -527,11 +525,11 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
             }
 
         pthread_mutex_lock(&sessions);
-        active_sessions --;
+        active_sessions--;
         pthread_mutex_unlock(&sessions);
 
         }
-        
+
         close(register_fd);
         
     }
@@ -555,22 +553,22 @@ int main(int argc, char **argv) {
 
     // Argument parsing of a mbroker process launch.
     strcpy(register_pipe_name, argv[1]);
-
     int max_sessions = atoi(argv[2]);
+
+    // Check if the number of sessions is valid.
     ALWAYS_ASSERT(max_sessions > 0, "Please insert a value > 0 for the sessions.");
 
-    //Initialization of Tecnico's file system.
-    ALWAYS_ASSERT(tfs_init(NULL) == 0, "Could not initiate Tecnico file system.");
-
-    //Check if the register pipe name is a valid path name. TODO
-
-    //Checking if register pipe already exists TODO ver lab pipes
+    //Check if the register pipe name is a valid path name.
+    ALWAYS_ASSERT(strlen(register_pipe_name) < PIPE_NAME_SIZE, "Register pipe name is too long.");
 
     // Remove pipe if it does not exist
     if (unlink(register_pipe_name) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", register_pipe_name, strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    //Initialization of Tecnico's file system.
+    ALWAYS_ASSERT(tfs_init(NULL) == 0, "Could not initiate Tecnico file system.");
 
     //Creates the register pipe.
     int check_err = mkfifo(register_pipe_name, 0640);
