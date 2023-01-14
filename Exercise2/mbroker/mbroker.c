@@ -105,15 +105,7 @@ int empty_spot() {
  * Input:
  *  - args: pointer to a pipe_box_code_t struct.
  */
-void* list_boxes(void *arg) {
-
-    // Increase the number of active sessions.
-    pthread_mutex_lock(&sessions);
-    active_sessions ++;
-    pthread_mutex_unlock(&sessions);
-
-    // Cast the argument to a pipe_box_code_t struct.
-    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+void list_boxes(pipe_box_code_t *args) {
 
     // Allocate space for a reply.
     box_listing_t *reply = (box_listing_t*)malloc(sizeof(box_listing_t));
@@ -143,7 +135,7 @@ void* list_boxes(void *arg) {
     free(reply);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close %s.", args->name.pipe);
 
-    return NULL;
+    return;
 }
 
 /*
@@ -151,15 +143,7 @@ void* list_boxes(void *arg) {
  * Input:
  *  - args: pointer to a pipe_box_code_t struct.
  */
-void* remove_box(void *arg) {
-
-    // Increase the number of active sessions.
-    pthread_mutex_lock(&sessions);
-    active_sessions ++;
-    pthread_mutex_unlock(&sessions);
-
-    // Cast the argument to a pipe_box_code_t struct.
-    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+void remove_box(pipe_box_code_t *args) {
 
     // Allocate space for a reply.
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
@@ -199,7 +183,7 @@ void* remove_box(void *arg) {
     free(reply);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close %s.", args->name.pipe);
 
-    return NULL;
+    return;
 }
 
 /*
@@ -207,15 +191,7 @@ void* remove_box(void *arg) {
  * Input:
  *  - args: pointer to a pipe_box_code_t struct.
  */
-void* create_box(void *arg) {
-
-    // Increase the number of active sessions.
-    pthread_mutex_lock(&sessions);
-    active_sessions ++;
-    pthread_mutex_unlock(&sessions);
-    
-    // Cast the argument to a pipe_box_code_t struct.
-    pipe_box_code_t *args = (pipe_box_code_t*) arg;
+void create_box(pipe_box_code_t *args) {
 
     // Allocate space for a reply.
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
@@ -276,7 +252,7 @@ void* create_box(void *arg) {
     free(reply);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close %s.", args->name.pipe);
 
-    return NULL;
+    return;
 }
 
 /*
@@ -284,15 +260,7 @@ void* create_box(void *arg) {
  * Input:
  *  - args: pointer to a pipe_box_code_t struct.
  */
-void* register_subscriber(void *arg) {
-
-    // Increase the number of active sessions.
-    pthread_mutex_lock(&sessions);
-    active_sessions ++;
-    pthread_mutex_unlock(&sessions);
-
-    // Cast the argument to a pipe_box_code_t struct.
-    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
+void register_subscriber(pipe_box_code_t *reg) {
     
     // Finds the box to subscribe and increases its subscribers.
     pthread_mutex_lock(&boxes_mutex);
@@ -303,7 +271,7 @@ void* register_subscriber(void *arg) {
     } else {
         fprintf(stderr, "%s does not exist.\n", reg->name.box);
         pthread_mutex_unlock(&boxes_mutex);
-        return NULL;
+        return;
     }
     pthread_mutex_unlock(&boxes_mutex);
 
@@ -315,7 +283,7 @@ void* register_subscriber(void *arg) {
     int file_fd = tfs_open(reg->name.box, 0);
     if (file_fd == -1) {
         fprintf(stderr, "MBroker could not open the box for writing.\n");
-        return NULL;
+        return;
     }
 
     // Creates a buffer to store messages.
@@ -359,7 +327,7 @@ void* register_subscriber(void *arg) {
             boxes[box_index].box.n_subscribers--;
             pthread_mutex_unlock(&boxes_mutex);
             
-            return NULL;
+            return;
 
         }
         
@@ -375,7 +343,7 @@ void* register_subscriber(void *arg) {
     boxes[box_index].box.n_subscribers--;
     pthread_mutex_unlock(&boxes_mutex);
 
-    return NULL;
+    return;
 }
 
 /*
@@ -383,15 +351,7 @@ void* register_subscriber(void *arg) {
  * Input:
  *  - args: pointer to a pipe_box_code_t struct.
  */
-void* register_publisher(void *arg) {
-
-    // Increase the number of active sessions.
-    pthread_mutex_lock(&sessions);
-    active_sessions ++;
-    pthread_mutex_unlock(&sessions);
-
-    // Casts the argument to a pipe_box_code_t struct.
-    pipe_box_code_t *reg = (pipe_box_code_t*) arg;
+void register_publisher(pipe_box_code_t *reg) {
 
     // Finds the box to publish and increases its publishers.
     pthread_mutex_lock(&boxes_mutex);
@@ -400,14 +360,14 @@ void* register_publisher(void *arg) {
     if (box_index == -1) {
         fprintf(stderr, "%s does not exist.\n", reg->name.box);
         pthread_mutex_unlock(&boxes_mutex);
-        return NULL;
+        return;
     }
     else if (boxes[box_index].box.n_publishers == 0) {
         boxes[box_index].box.n_publishers++;
     } else {
         fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
         pthread_mutex_unlock(&boxes_mutex);
-        return NULL;
+        return;
     }
     pthread_mutex_unlock(&boxes_mutex);
 
@@ -419,7 +379,7 @@ void* register_publisher(void *arg) {
     int file_fd = tfs_open(reg->name.box, TFS_O_APPEND);
     if (file_fd == -1) {
         fprintf(stderr, "MBroker could not open the box for writing.\n");
-        return NULL;
+        return;
     }
 
     // Creates a buffer to store messages.
@@ -456,7 +416,7 @@ void* register_publisher(void *arg) {
             boxes[box_index].box.n_publishers--;
             pthread_mutex_unlock(&boxes_mutex);
             
-            return NULL;
+            return;
         }
 
     }
@@ -472,9 +432,44 @@ void* register_publisher(void *arg) {
     boxes[box_index].box.n_publishers--;
     pthread_mutex_unlock(&boxes_mutex);
 
-    return NULL;
+    return;
 }
 
+void *dequeue(void *args) {
+
+    pc_queue_t *queue = (pc_queue_t*)args;
+
+    pipe_box_code_t *req = NULL;
+
+    while (true) {
+
+        req = (pipe_box_code_t *)pcq_dequeue(queue);
+
+        switch (req->code) {
+        case 1:
+            register_publisher(req);
+            break;
+        case 2:
+            register_subscriber(req);
+            break;
+        case 3:
+            create_box(req);
+            break;
+        case 5:
+            remove_box(req);
+            break;
+        case 7:
+            list_boxes(req);
+            break;
+        default:
+            fprintf(stderr, "Invalid code received.\n");
+            break;
+        }
+
+    }
+
+    return NULL;
+}
 /*
  * Processes sessions and working threads.
  * Input:
@@ -483,8 +478,16 @@ void* register_publisher(void *arg) {
  */
 void read_registrations(const char *register_pipe_name, int max_sessions) {
 
+    pc_queue_t *queue = (pc_queue_t*)malloc(sizeof(pc_queue_t));
+    pcq_create(queue, (size_t)max_sessions);
+
     pthread_t tid[max_sessions];
 
+    for (int i = 0; i < max_sessions; i++) {
+        ALWAYS_ASSERT((pthread_create(&tid[i], NULL, dequeue, queue) == 0),
+                                                    "Could not create register_publisher thread.");
+    }
+    
     while (true) {
 
         int register_fd = open(register_pipe_name, O_RDONLY);
@@ -496,39 +499,7 @@ void read_registrations(const char *register_pipe_name, int max_sessions) {
         bytes = read(register_fd, args, sizeof(pipe_box_code_t));
         ALWAYS_ASSERT(bytes == sizeof(pipe_box_code_t), "Could not read registration form.");
 
-        if (active_sessions < max_sessions) {
-
-            switch (args->code) {
-            case 1:
-                ALWAYS_ASSERT((pthread_create(&tid[0], NULL, register_publisher, args) == 0), 
-                                                    "Could not create register_publisher thread.");
-                break;
-            case 2:
-                ALWAYS_ASSERT((pthread_create(&tid[1], NULL, register_subscriber, args) == 0),
-                                                    "Could not create register_subscriber thread.");
-                break;
-            case 3:
-                ALWAYS_ASSERT((pthread_create(&tid[2], NULL, create_box, args) == 0), 
-                                                            "Could not create create_box thread.");
-                break;
-            case 5:
-                ALWAYS_ASSERT((pthread_create(&tid[3], NULL, remove_box, args) == 0), 
-                                                            "Could not create remove_box thread.");
-                break;
-            case 7:
-                ALWAYS_ASSERT((pthread_create(&tid[4], NULL, list_boxes, args) == 0), 
-                                                            "Could not create list_boxes thread.");
-                break;
-            default:
-                fprintf(stderr, "Invalid code received.\n");
-                break;
-            }
-
-        pthread_mutex_lock(&sessions);
-        active_sessions--;
-        pthread_mutex_unlock(&sessions);
-
-        }
+        pcq_enqueue(queue, args);
 
         close(register_fd);
         
