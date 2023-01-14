@@ -16,14 +16,7 @@
 #include <pthread.h>
 #include <errno.h> 
 
-pthread_cond_t pub_sub_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t pub_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t sub_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t boxes_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t sessions = PTHREAD_MUTEX_INITIALIZER;
-
-// Number of active sessions (clients).
-int active_sessions = 0;
 
 // Array of boxes (initialized at taken = false for all boxes).
 box_status_t boxes[MAX_BOX_NUMBER];
@@ -42,16 +35,8 @@ static void sig_handler(int sig) {
 
         ALWAYS_ASSERT(tfs_destroy() == 0,
                         "Could not destroy Tecnico file system.");
-        ALWAYS_ASSERT(pthread_cond_destroy(&pub_sub_cond) == 0,
-                        "Could not destroy pub_sub_cond.");
-        ALWAYS_ASSERT(pthread_mutex_destroy(&pub_mutex) == 0,
-                        "Could not destroy pub_sub_mutex.");
-        ALWAYS_ASSERT(pthread_mutex_destroy(&sub_mutex) == 0,
-                        "Could not destroy pub_sub_mutex.");
         ALWAYS_ASSERT(pthread_mutex_destroy(&boxes_mutex) == 0, 
                         "Could not destroy boxes_mutex.");
-        ALWAYS_ASSERT(pthread_mutex_destroy(&sessions) == 0, 
-                        "Could not destroy sessions mutex.");
 
         exit(EXIT_SUCCESS);
 
@@ -72,13 +57,17 @@ static void sig_handler(int sig) {
  */
 int find_box(const char *name) {
 
+    pthread_mutex_lock(&boxes_mutex);
     // Looks for a box that corresponds to "name" in boxes and returns its index.
     for (int i = 0; i < MAX_BOX_NUMBER; i++) {
         if (boxes[i].taken && !strcmp(boxes[i].box.box_name, name)) {
+            pthread_mutex_unlock(&boxes_mutex);
+            pthread_mutex_lock(&boxes[i].box_mutex);
             return i;
         }
     }
 
+    pthread_mutex_unlock(&boxes_mutex);
     return -1;
 }
 
@@ -90,12 +79,16 @@ int find_box(const char *name) {
  */
 int empty_spot() {
 
+    pthread_mutex_lock(&boxes_mutex);
     //Finds an empty spot in boxes.
     for (int i = 0; i < MAX_BOX_NUMBER; i++) {
         if (!boxes[i].taken) {
+            pthread_mutex_unlock(&boxes_mutex);
             return i;
         }
     }
+
+    pthread_mutex_unlock(&boxes_mutex);
     return -1;
 
 }
@@ -119,6 +112,7 @@ void list_boxes(pipe_box_code_t *args) {
     for (int i = 0; i < MAX_BOX_NUMBER; i++) {
         if (boxes[i].taken){
         reply->boxes[i] = boxes[i].box;
+
         reply->box_amount++;
         }
     }
@@ -162,10 +156,16 @@ void remove_box(pipe_box_code_t *args) {
     } else {
 
         // Finds box and sets its taken value to false.
-        pthread_mutex_lock(&boxes_mutex);
         int box_index = find_box(args->name.box);
         boxes[box_index].taken = false;
-        pthread_mutex_unlock(&boxes_mutex);
+        pthread_mutex_unlock(&boxes[box_index].box_mutex);
+        pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
+        pthread_mutex_unlock(&boxes[box_index].sub_box_mutex);
+        pthread_cond_broadcast(&boxes[box_index].box_cond);
+        pthread_mutex_destroy(&boxes[box_index].box_mutex);
+        pthread_mutex_destroy(&boxes[box_index].pub_box_mutex);
+        pthread_mutex_destroy(&boxes[box_index].sub_box_mutex);
+        pthread_cond_destroy(&boxes[box_index].box_cond);
 
         // Sets the remaining reply's fields.
         reply->ret = 0;
@@ -199,15 +199,18 @@ void create_box(pipe_box_code_t *args) {
     // Sets the reply's code.
     reply->code = 4;
 
-    // Tries to find an empty spot in the boxes.
-    pthread_mutex_lock(&boxes_mutex);
+    // Variable to store an empty spot in boxes.
     int spot = empty_spot();
 
-    if (find_box(args->name.box) != -1) {
+    // Tries to find the box in boxes.
+    int exists = find_box(args->name.box);
+
+    if (exists != -1) {
 
         // Sets the reamining reply's fields.
         reply->ret = -1;
         strcpy(reply->err_message, "Box already exists.");
+        pthread_mutex_unlock(&boxes[exists].box_mutex);
 
     } else if (spot != -1) {
 
@@ -223,6 +226,10 @@ void create_box(pipe_box_code_t *args) {
             strcpy(boxes[spot].box.tfs_file, args->name.box);
             boxes[spot].box.n_publishers = 0;
             boxes[spot].box.n_subscribers = 0;
+            pthread_mutex_init(&boxes[spot].box_mutex, NULL);
+            pthread_cond_init(&boxes[spot].box_cond, NULL);
+            pthread_mutex_init(&boxes[spot].pub_box_mutex, NULL);
+            pthread_mutex_init(&boxes[spot].sub_box_mutex, NULL);
 
             // Sets the remaining reply's fields.
             reply->ret = 0;
@@ -230,16 +237,20 @@ void create_box(pipe_box_code_t *args) {
 
             // Closes the box in tfs.
             tfs_close(box_fd);
+
+        } else {
+            // Sets the remaining reply's fields.
+            reply->ret = -1;
+            strcpy(reply->err_message, "Could not create file in TFS.");
         }
+
 
     } else {
 
         // Sets the remaining reply's fields.
         reply->ret = -1;
         strcpy(reply->err_message, "Maximum box capacity reached.");
-
     }
-    pthread_mutex_unlock(&boxes_mutex);
 
     // Open the manager's pipe for writing and write the reply to it.
     int pipe_fd = open(args->name.pipe, O_WRONLY);
@@ -263,17 +274,15 @@ void create_box(pipe_box_code_t *args) {
 void register_subscriber(pipe_box_code_t *reg) {
     
     // Finds the box to subscribe and increases its subscribers.
-    pthread_mutex_lock(&boxes_mutex);
     int box_index = find_box(reg->name.box);
 
     if (box_index != -1) {
         boxes[box_index].box.n_subscribers++;
+        pthread_mutex_unlock(&boxes[box_index].box_mutex);
     } else {
         fprintf(stderr, "%s does not exist.\n", reg->name.box);
-        pthread_mutex_unlock(&boxes_mutex);
         return;
     }
-    pthread_mutex_unlock(&boxes_mutex);
 
     // Opens the subscriber's pipe for writing.
     int pipe_fd = open(reg->name.pipe, O_WRONLY);
@@ -295,7 +304,7 @@ void register_subscriber(pipe_box_code_t *reg) {
     ssize_t bytes_read = 1;
 
     // Reads the messages in the box and sends the messages to the subscriber.
-    pthread_mutex_lock(&sub_mutex);
+    pthread_mutex_lock(&boxes[box_index].sub_box_mutex);
     while (bytes_read > 0) {
         
         bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
@@ -303,7 +312,7 @@ void register_subscriber(pipe_box_code_t *reg) {
         // If read 0 bytes, must wait for a publisher to write, then reads again.
         while (bytes_read == 0) {
 
-            pthread_cond_wait(&pub_sub_cond, &sub_mutex);
+            pthread_cond_wait(&boxes[box_index].box_cond, &boxes[box_index].sub_box_mutex);
 
             bytes_read = tfs_read(file_fd, buffer, MESSAGE_SIZE - 1);
             
@@ -314,34 +323,33 @@ void register_subscriber(pipe_box_code_t *reg) {
         if( bytes_written != bytes_read || bytes_written == -1) {
 
             fprintf(stderr, "An error occured sending the message to the subscriber.\n");
-            
-            pthread_mutex_unlock(&sub_mutex);
-            
+            pthread_mutex_unlock(&boxes[box_index].sub_box_mutex);
+
             // Closes the box and the pipe.
             ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
                                                                                     reg->name.box);
             ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
             
             // Decreases the number of subscribers.
-            pthread_mutex_lock(&boxes_mutex);
+            pthread_mutex_lock(&boxes[box_index].box_mutex);
             boxes[box_index].box.n_subscribers--;
-            pthread_mutex_unlock(&boxes_mutex);
-            
+            pthread_mutex_unlock(&boxes[box_index].box_mutex);
+
             return;
 
         }
         
     }
-    pthread_mutex_unlock(&sub_mutex);
+    pthread_mutex_unlock(&boxes[box_index].sub_box_mutex);
 
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
 
     // Decreases the number of subscribers.
-    pthread_mutex_lock(&boxes_mutex);
+    pthread_mutex_unlock(&boxes[box_index].box_mutex);
     boxes[box_index].box.n_subscribers--;
-    pthread_mutex_unlock(&boxes_mutex);
+    pthread_mutex_unlock(&boxes[box_index].box_mutex);
 
     return;
 }
@@ -354,22 +362,20 @@ void register_subscriber(pipe_box_code_t *reg) {
 void register_publisher(pipe_box_code_t *reg) {
 
     // Finds the box to publish and increases its publishers.
-    pthread_mutex_lock(&boxes_mutex);
     int box_index = find_box(reg->name.box);
 
     if (box_index == -1) {
         fprintf(stderr, "%s does not exist.\n", reg->name.box);
-        pthread_mutex_unlock(&boxes_mutex);
         return;
     }
     else if (boxes[box_index].box.n_publishers == 0) {
         boxes[box_index].box.n_publishers++;
+        pthread_mutex_unlock(&boxes[box_index].box_mutex);
     } else {
         fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
-        pthread_mutex_unlock(&boxes_mutex);
+        pthread_mutex_unlock(&boxes[box_index].box_mutex);
         return;
     }
-    pthread_mutex_unlock(&boxes_mutex);
 
     // Opens the publisher's pipe for reading.
     int pipe_fd = open(reg->name.pipe, O_RDONLY);
@@ -388,7 +394,7 @@ void register_publisher(pipe_box_code_t *reg) {
     ssize_t bytes_written = 1;
 
     // Reads the messages from the pipe and writes them to the box.
-    pthread_mutex_lock(&pub_mutex);
+    pthread_mutex_lock(&boxes[box_index].pub_box_mutex);
     while(bytes_read > 0) {
 
         bytes_read = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
@@ -398,13 +404,13 @@ void register_publisher(pipe_box_code_t *reg) {
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
         // If writes to the box, signals the subscribers that they can read.
         if (bytes_written > 0 && boxes[box_index].box.n_subscribers > 0) {
-            pthread_cond_broadcast(&pub_sub_cond);
+            pthread_cond_broadcast(&boxes[box_index].box_cond);
         }
 
         if (bytes_read != bytes_written) {
             
             fprintf(stderr, "Bytes written did not match with bytes read!\n");
-            pthread_mutex_unlock(&pub_mutex);
+            pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
 
             // Closes the box and the pipe.
             ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
@@ -412,26 +418,23 @@ void register_publisher(pipe_box_code_t *reg) {
             ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
 
             // Decreases the number of publishers.
-            pthread_mutex_lock(&boxes_mutex);
-            boxes[box_index].box.n_publishers--;
-            pthread_mutex_unlock(&boxes_mutex);
-            
+            pthread_mutex_lock(&boxes[box_index].box_mutex);
+            boxes[box_index].box.n_subscribers--;
+            pthread_mutex_unlock(&boxes[box_index].box_mutex);
+
             return;
         }
 
     }
-
-    pthread_mutex_unlock(&pub_mutex);
-
+    pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
 
     // Decreases the number of publishers.
-    pthread_mutex_lock(&boxes_mutex);
-    boxes[box_index].box.n_publishers--;
-    pthread_mutex_unlock(&boxes_mutex);
-
+    pthread_mutex_lock(&boxes[box_index].box_mutex);
+    boxes[box_index].box.n_subscribers--;
+    pthread_mutex_unlock(&boxes[box_index].box_mutex);
     return;
 }
 
@@ -470,6 +473,7 @@ void *dequeue(void *args) {
 
     return NULL;
 }
+
 /*
  * Processes sessions and working threads.
  * Input:

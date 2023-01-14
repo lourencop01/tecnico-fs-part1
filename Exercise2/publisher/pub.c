@@ -27,8 +27,6 @@ void send_message(int fd) {
     // Creates a variable to store the number of bytes written.
     ssize_t bytes = -1;
 
-    printf("Insert nuclear codes:\n");
-
     // While loop to read the messages from stdin until CTRL+D (EOF) is pressed.
     while (fgets(message, MESSAGE_SIZE, stdin) != NULL) {
         //remove the '\n' character from the message

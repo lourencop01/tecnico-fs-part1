@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <pthread.h>
 
 #define PIPE_NAME_SIZE 256
 #define BOX_NAME_SIZE 32
@@ -46,6 +47,10 @@ typedef struct {
 typedef struct {
     bool taken;
     box_t box;
+    pthread_mutex_t box_mutex;
+    pthread_mutex_t pub_box_mutex;
+    pthread_mutex_t sub_box_mutex;
+    pthread_cond_t box_cond;
 } box_status_t;
 
 typedef struct {

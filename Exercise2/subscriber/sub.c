@@ -110,5 +110,7 @@ int main(int argc, char **argv) {
     // Close and delete the subscriber's pipe.
     ALWAYS_ASSERT(close(pipe_fd) == 0, "Could not close the pipe.");
     ALWAYS_ASSERT(unlink(pipe_name) == 0, "Could not delete the pipe.");
+
     return -1;
+
 }
