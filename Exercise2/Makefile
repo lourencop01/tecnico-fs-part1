@@ -86,7 +86,6 @@ fmt: $(SOURCES) $(HEADERS)
 	clang-format -i -style=Microsoft $^
 
 
-
 # Note the lack of a rule.
 # make uses a set of default rules, one of which compiles C binaries
 # the CC, LD, CFLAGS and LDFLAGS are used in this rule
