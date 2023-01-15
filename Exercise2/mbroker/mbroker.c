@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <errno.h> 
 
+// Mutex for reading and writing to the boxes array.
 pthread_mutex_t boxes_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Array of boxes (initialized at taken = false for all boxes).
@@ -45,6 +46,36 @@ static void sig_handler(int sig) {
     // Must be SIGQUIT - print a message and terminate the process
     fprintf(stderr, "Caught SIGQUIT - BOOM!\n");
     exit(EXIT_SUCCESS);
+}
+
+/*
+ * Shutdowns a subscriber.
+ * Input:
+ *  - reg: form with information about the subscriber.
+ */
+void shutdown_subscriber(pipe_box_code_t *reg, const char *err_message) {
+
+    // Send shutdown message to the register pipe.
+    // Opens the subscriber's pipe for writing.
+    int pipe_fd = open(reg->name.pipe, O_WRONLY);
+    ALWAYS_ASSERT(pipe_fd != -1, "Shutdown could not open %s.", reg->name.pipe);
+
+    // Creates the shutdown message.
+    char err[100] = "ERROR: ";
+    strcat(err, err_message);
+
+    // Writes the shutdown message to the pipe.
+    ALWAYS_ASSERT(write(pipe_fd, err, strlen(err) + 1) > 0,
+                                    "Could not write to %s.", reg->name.pipe);
+
+    // Close the register pipe.
+    ALWAYS_ASSERT(close(pipe_fd) != -1, "Could not close register pipe.");
+
+    // Free the memory allocated for the register pipe.
+    free(reg);
+
+    return;
+
 }
 
 /*
@@ -226,6 +257,7 @@ void create_box(pipe_box_code_t *args) {
             strcpy(boxes[spot].box.tfs_file, args->name.box);
             boxes[spot].box.n_publishers = 0;
             boxes[spot].box.n_subscribers = 0;
+            boxes[spot].box.box_size = 0;
             pthread_mutex_init(&boxes[spot].box_mutex, NULL);
             pthread_cond_init(&boxes[spot].box_cond, NULL);
             pthread_mutex_init(&boxes[spot].pub_box_mutex, NULL);
@@ -280,7 +312,7 @@ void register_subscriber(pipe_box_code_t *reg) {
         boxes[box_index].box.n_subscribers++;
         pthread_mutex_unlock(&boxes[box_index].box_mutex);
     } else {
-        fprintf(stderr, "%s does not exist.\n", reg->name.box);
+        shutdown_subscriber(reg, "Box does not exist.\n");
         return;
     }
 
@@ -291,7 +323,7 @@ void register_subscriber(pipe_box_code_t *reg) {
     // Opens the box in tfs with offset 0.
     int file_fd = tfs_open(reg->name.box, 0);
     if (file_fd == -1) {
-        fprintf(stderr, "MBroker could not open the box for writing.\n");
+        shutdown_subscriber(reg, "MBroker could not open the box for reading.\n");
         return;
     }
 
@@ -367,8 +399,7 @@ void register_publisher(pipe_box_code_t *reg) {
     if (box_index == -1) {
         fprintf(stderr, "%s does not exist.\n", reg->name.box);
         return;
-    }
-    else if (boxes[box_index].box.n_publishers == 0) {
+    } else if (boxes[box_index].box.n_publishers == 0) {
         boxes[box_index].box.n_publishers++;
         pthread_mutex_unlock(&boxes[box_index].box_mutex);
     } else {
@@ -395,27 +426,29 @@ void register_publisher(pipe_box_code_t *reg) {
 
     // Reads the messages from the pipe and writes them to the box.
     pthread_mutex_lock(&boxes[box_index].pub_box_mutex);
-    while(bytes_read > 0) {
+    while (bytes_read > 0) {
 
         bytes_read = read(pipe_fd, read_buff, MESSAGE_SIZE - 1);
         // Sets last character to \n.
         read_buff[strlen(read_buff)] = '\n';
 
         bytes_written = tfs_write(file_fd, read_buff, (size_t)bytes_read);
+        boxes[box_index].box.box_size += (uint64_t)bytes_written;
         // If writes to the box, signals the subscribers that they can read.
         if (bytes_written > 0 && boxes[box_index].box.n_subscribers > 0) {
             pthread_cond_broadcast(&boxes[box_index].box_cond);
         }
 
         if (bytes_read != bytes_written) {
-            
+
             fprintf(stderr, "Bytes written did not match with bytes read!\n");
             pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
 
             // Closes the box and the pipe.
-            ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
-                                                                                    reg->name.box);
-            ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
+            ALWAYS_ASSERT(tfs_close(file_fd) != -1,
+                          "MBroker could not close the %s.", reg->name.box);
+            ALWAYS_ASSERT(close(pipe_fd) != -1,
+                          "MBroker could not close the %s.", reg->name.pipe);
 
             // Decreases the number of publishers.
             pthread_mutex_lock(&boxes[box_index].box_mutex);
@@ -424,16 +457,17 @@ void register_publisher(pipe_box_code_t *reg) {
 
             return;
         }
-
     }
     pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
     // Closes the box and the pipe.
-    ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
-    ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
+    ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.",
+                  reg->name.box);
+    ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.",
+                  reg->name.pipe);
 
     // Decreases the number of publishers.
     pthread_mutex_lock(&boxes[box_index].box_mutex);
-    boxes[box_index].box.n_subscribers--;
+    boxes[box_index].box.n_publishers--;
     pthread_mutex_unlock(&boxes[box_index].box_mutex);
     return;
 }

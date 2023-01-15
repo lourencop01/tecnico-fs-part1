@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <errno.h>
 
+int message_count = 0;
 /**
  * Signal handler function.
  */
@@ -23,6 +24,7 @@
         if (signal(SIGINT, sig_handler) == SIG_ERR) {
             exit(EXIT_FAILURE);
         }
+        printf("Messages read: %d\n", message_count);
         exit(EXIT_SUCCESS); // Exit the process
         return; // Resume execution at point of interruption
     }
@@ -32,6 +34,13 @@
     exit(EXIT_SUCCESS);
 }
 
+void increase_counter(char *message) {
+    char *token = strtok(message, "\n");
+    while (token != NULL) {
+        token = strtok(NULL, "\n");
+        message_count++;
+    }
+}
 int main(int argc, char **argv) {
 
     // Set the signal handler for SIGINT.
@@ -87,9 +96,6 @@ int main(int argc, char **argv) {
     ssize_t bytes_written = write(register_fd, reg, sizeof(pipe_box_code_t));
     ALWAYS_ASSERT(bytes_written > 0, "Could not write to the register pipe.");
 
-    // Free the registration form.
-    free(reg);
-
     // Close the register pipe.
     ALWAYS_ASSERT(close(register_fd) == 0, "Could not close the register pipe.");
 
@@ -99,17 +105,34 @@ int main(int argc, char **argv) {
 
     // Read messages from the pipe.
     char message[MESSAGE_SIZE];
-    while(true) {
+    memset(message, '\0', MESSAGE_SIZE);
 
-        memset(message, '\0', MESSAGE_SIZE);
-        read(pipe_fd, message, MESSAGE_SIZE);
+    ALWAYS_ASSERT(read(pipe_fd, message, MESSAGE_SIZE) != -1, "Could not read"
+                                                              "from the pipe.");
+    if(!strncmp(message, "ERROR:", 6)) {
+        fprintf(stderr, "%s", message);        
+
+        // Close and delete the subscriber's pipe.
+        ALWAYS_ASSERT(close(pipe_fd) == 0, "Could not close the pipe.");
+        ALWAYS_ASSERT(unlink(pipe_name) == 0, "Could not delete the pipe.");
+
+        return -1;
+    }
+
+    while (true) {
+
         printf("%s", message);
-
+        increase_counter(message);
+        memset(message, '\0', MESSAGE_SIZE);
+        ALWAYS_ASSERT(read(pipe_fd, message, MESSAGE_SIZE) != -1, "Could not read"                                              "from the pipe.");
     }
 
     // Close and delete the subscriber's pipe.
     ALWAYS_ASSERT(close(pipe_fd) == 0, "Could not close the pipe.");
     ALWAYS_ASSERT(unlink(pipe_name) == 0, "Could not delete the pipe.");
+
+    // Free the registration form.
+    free(reg);
 
     return -1;
 
