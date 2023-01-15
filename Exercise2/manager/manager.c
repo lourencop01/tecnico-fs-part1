@@ -155,6 +155,7 @@ int main(int argc, char **argv) {
                                                                     reply->boxes[i].n_subscribers);
             }
         }
+        free(reply);
     }
 
     // Closes and deletes the client's pipe.

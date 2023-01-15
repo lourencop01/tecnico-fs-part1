@@ -170,6 +170,9 @@ void list_boxes(pipe_box_code_t *args) {
  */
 void remove_box(pipe_box_code_t *args) {
 
+    char box_name[BOX_NAME_SIZE];
+    strcpy(box_name, args->name.box);
+
     // Allocate space for a reply.
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
 
@@ -177,7 +180,7 @@ void remove_box(pipe_box_code_t *args) {
     reply->code = 6;
 
     // Tries to remove the box from tfs.
-    int check_err = tfs_unlink(args->name.box);
+    int check_err = tfs_unlink(box_name);
     if (check_err == -1) {
 
         // Sets the remaining reply's fields.
@@ -187,7 +190,7 @@ void remove_box(pipe_box_code_t *args) {
     } else {
 
         // Finds box and sets its taken value to false.
-        int box_index = find_box(args->name.box);
+        int box_index = find_box(box_name);
         boxes[box_index].taken = false;
         pthread_mutex_unlock(&boxes[box_index].box_mutex);
         pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
@@ -211,7 +214,6 @@ void remove_box(pipe_box_code_t *args) {
     ALWAYS_ASSERT(bytes_written > 0, "MBroker could not write to the %s.", args->name.pipe);
 
     // Close the pipe and free the reply.
-    free(reply);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close %s.", args->name.pipe);
 
     return;
@@ -224,6 +226,9 @@ void remove_box(pipe_box_code_t *args) {
  */
 void create_box(pipe_box_code_t *args) {
 
+    char box_name[BOX_NAME_SIZE];
+    strcpy(box_name, args->name.box);
+
     // Allocate space for a reply.
     req_reply_t *reply = (req_reply_t*)malloc(sizeof(req_reply_t));
 
@@ -234,7 +239,7 @@ void create_box(pipe_box_code_t *args) {
     int spot = empty_spot();
 
     // Tries to find the box in boxes.
-    int exists = find_box(args->name.box);
+    int exists = find_box(box_name);
 
     if (exists != -1) {
 
@@ -246,15 +251,14 @@ void create_box(pipe_box_code_t *args) {
     } else if (spot != -1) {
 
         // Creates the box in tfs.
-        int box_fd = tfs_open(args->name.box, TFS_O_CREAT);
+        int box_fd = tfs_open(box_name, TFS_O_CREAT);
 
-        
-        if (box_fd != -1) {
+                if (box_fd != -1) {
 
             // Sets the box's fields.
             boxes[spot].taken = true;
-            strcpy(boxes[spot].box.box_name, args->name.box);
-            strcpy(boxes[spot].box.tfs_file, args->name.box);
+            strcpy(boxes[spot].box.box_name, box_name);
+            strcpy(boxes[spot].box.tfs_file, box_name);
             boxes[spot].box.n_publishers = 0;
             boxes[spot].box.n_subscribers = 0;
             boxes[spot].box.box_size = 0;
@@ -304,9 +308,12 @@ void create_box(pipe_box_code_t *args) {
  *  - args: pointer to a pipe_box_code_t struct.
  */
 void register_subscriber(pipe_box_code_t *reg) {
-    
+
+    char box_name[BOX_NAME_SIZE];
+    strcpy(box_name, reg->name.box);
+
     // Finds the box to subscribe and increases its subscribers.
-    int box_index = find_box(reg->name.box);
+    int box_index = find_box(box_name);
 
     if (box_index != -1) {
         boxes[box_index].box.n_subscribers++;
@@ -321,7 +328,7 @@ void register_subscriber(pipe_box_code_t *reg) {
     ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
 
     // Opens the box in tfs with offset 0.
-    int file_fd = tfs_open(reg->name.box, 0);
+    int file_fd = tfs_open(box_name, 0);
     if (file_fd == -1) {
         shutdown_subscriber(reg, "MBroker could not open the box for reading.\n");
         return;
@@ -358,8 +365,8 @@ void register_subscriber(pipe_box_code_t *reg) {
             pthread_mutex_unlock(&boxes[box_index].sub_box_mutex);
 
             // Closes the box and the pipe.
-            ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", 
-                                                                                    reg->name.box);
+            ALWAYS_ASSERT(tfs_close(file_fd) != -1,
+                          "MBroker could not close the %s.", box_name);
             ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
             
             // Decreases the number of subscribers.
@@ -375,7 +382,8 @@ void register_subscriber(pipe_box_code_t *reg) {
     pthread_mutex_unlock(&boxes[box_index].sub_box_mutex);
 
     // Closes the box and the pipe.
-    ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.", reg->name.box);
+    ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.",
+                  box_name);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.", reg->name.pipe);
 
     // Decreases the number of subscribers.
@@ -393,17 +401,20 @@ void register_subscriber(pipe_box_code_t *reg) {
  */
 void register_publisher(pipe_box_code_t *reg) {
 
+    char box_name[BOX_NAME_SIZE];
+    strcpy(box_name, reg->name.box);
+
     // Finds the box to publish and increases its publishers.
-    int box_index = find_box(reg->name.box);
+    int box_index = find_box(box_name);
 
     if (box_index == -1) {
-        fprintf(stderr, "%s does not exist.\n", reg->name.box);
+        fprintf(stderr, "%s does not exist.\n", box_name);
         return;
     } else if (boxes[box_index].box.n_publishers == 0) {
         boxes[box_index].box.n_publishers++;
         pthread_mutex_unlock(&boxes[box_index].box_mutex);
     } else {
-        fprintf(stderr, "%s already has a publisher.\n", reg->name.box);
+        fprintf(stderr, "%s already has a publisher.\n", box_name);
         pthread_mutex_unlock(&boxes[box_index].box_mutex);
         return;
     }
@@ -413,7 +424,7 @@ void register_publisher(pipe_box_code_t *reg) {
     ALWAYS_ASSERT(pipe_fd != -1, "MBroker could not open %s.", reg->name.pipe);
 
     // Opens the box in tfs in append mode.
-    int file_fd = tfs_open(reg->name.box, TFS_O_APPEND);
+    int file_fd = tfs_open(box_name, TFS_O_APPEND);
     if (file_fd == -1) {
         fprintf(stderr, "MBroker could not open the box for writing.\n");
         return;
@@ -446,7 +457,7 @@ void register_publisher(pipe_box_code_t *reg) {
 
             // Closes the box and the pipe.
             ALWAYS_ASSERT(tfs_close(file_fd) != -1,
-                          "MBroker could not close the %s.", reg->name.box);
+                          "MBroker could not close the %s.", box_name);
             ALWAYS_ASSERT(close(pipe_fd) != -1,
                           "MBroker could not close the %s.", reg->name.pipe);
 
@@ -461,7 +472,7 @@ void register_publisher(pipe_box_code_t *reg) {
     pthread_mutex_unlock(&boxes[box_index].pub_box_mutex);
     // Closes the box and the pipe.
     ALWAYS_ASSERT(tfs_close(file_fd) != -1, "MBroker could not close the %s.",
-                  reg->name.box);
+                  box_name);
     ALWAYS_ASSERT(close(pipe_fd) != -1, "MBroker could not close the %s.",
                   reg->name.pipe);
 
