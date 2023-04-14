@@ -1,5 +1,5 @@
 # Técnico File System
-University project | Class: Operating Systems (FINAL GRADE 19/20) | Instituto Superior Técnico 2022
+University project | Class: Operating Systems (Grade: 19/20) | Instituto Superior Técnico 2022
 
 File System project regarding Operating Systems
 
